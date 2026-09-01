@@ -59,36 +59,66 @@ jobs:
       - run: docker compose config --quiet
 
   # ---------------------------------------------------------------------
-  # Gate 4: code quality. Skips cleanly until the Python project exists.
+  # Detect whether Python sources exist yet.
+  #
+  # Until Phase 1 lands there is no application code, and tools that are
+  # correct on a populated repo fail on an empty one: mypy exits 2 with no
+  # files, pytest exits 5 when it collects no tests. Gating on the presence
+  # of a pyproject.toml was not enough — the file exists before the code
+  # does. Gate on actual .py files instead, mirroring the Makefile.
+  # ---------------------------------------------------------------------
+  detect:
+    name: Detect sources
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.d.outputs.python }}
+      tests: ${{ steps.d.outputs.tests }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: d
+        run: |
+          if [ -n "$(find apps/api simulator ml -name '*.py' -not -path '*/.*' 2>/dev/null | head -1)" ]; then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "python=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=No Python sources yet::Skipping lint, types, tests and SAST until Phase 1 lands."
+          fi
+          if [ -n "$(find tests -name 'test_*.py' 2>/dev/null | head -1)" ]; then
+            echo "tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tests=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------
+  # Gate 4: code quality.
   # ---------------------------------------------------------------------
   quality:
     name: Lint, types, module boundaries
     runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.python == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - name: Detect project
-        id: detect
-        run: |
-          if [ -f apps/api/pyproject.toml ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
-          else echo "ready=false" >> "$GITHUB_OUTPUT"; echo "::notice::Python project not created yet (phase 1)"; fi
-      - if: steps.detect.outputs.ready == 'true'
-        run: pip install -e "apps/api[dev]"
-      - if: steps.detect.outputs.ready == 'true'
-        run: ruff check apps/api simulator ml tests
-      - if: steps.detect.outputs.ready == 'true'
-        run: mypy apps/api
+      - run: pip install -e "apps/api[dev]"
+      - run: ruff check apps/api simulator ml tests
+      - run: ruff format --check apps/api simulator ml tests
+      - run: mypy apps/api
       - name: Module boundaries (ADR-009)
-        if: steps.detect.outputs.ready == 'true'
         run: lint-imports
 
   # ---------------------------------------------------------------------
   # Gate 5: tests, including the honesty gates.
+  #
+  # These must never silently skip once implemented — that is why they are
+  # separate steps rather than one pytest invocation over tests/.
   # ---------------------------------------------------------------------
   test:
     name: Tests
     runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.tests == 'true'
     services:
       redis:
         image: redis:7-alpine
@@ -100,32 +130,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - name: Detect project
-        id: detect
-        run: |
-          if [ -f apps/api/pyproject.toml ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
-          else echo "ready=false" >> "$GITHUB_OUTPUT"; echo "::notice::Test suite not created yet (phase 1)"; fi
-      - if: steps.detect.outputs.ready == 'true'
-        run: pip install -e "apps/api[dev]"
-      - if: steps.detect.outputs.ready == 'true'
+      - run: pip install -e "apps/api[dev]"
+      - name: Unit and integration
         run: pytest tests/unit tests/integration -q
-
-      # These must never be allowed to "skip" silently once implemented.
-      - name: Leakage gates (spec §19)
-        if: steps.detect.outputs.ready == 'true'
+      - name: Leakage gates (spec §19) — all five
         run: pytest tests/leakage -q
       - name: Security suite
-        if: steps.detect.outputs.ready == 'true'
         run: pytest tests/security -q
       - name: Fairness — no protected attributes (spec §22.2)
-        if: steps.detect.outputs.ready == 'true'
         run: pytest tests/fairness -q
 
   # ---------------------------------------------------------------------
-  # Gate 6: supply chain.
+  # Gate 6: supply chain. Trivy always runs; CodeQL needs source.
   # ---------------------------------------------------------------------
   supply-chain:
-    name: Dependency scan, SAST, SBOM
+    name: Dependency scan and SBOM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -137,10 +156,21 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
-      - name: SAST
-        uses: github/codeql-action/init@v3
-        with: { languages: python, javascript }
-      - uses: github/codeql-action/analyze@v3
       - name: SBOM
         uses: anchore/sbom-action@v0
         with: { format: cyclonedx-json, artifact-name: atlas-sbom.cdx.json }
+
+  sast:
+    name: SAST (CodeQL)
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.python == 'true'
+    permissions:
+      contents: read
+      security-events: write   # required to upload results; absence fails the job
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with: { languages: python }
+      - uses: github/codeql-action/analyze@v3
