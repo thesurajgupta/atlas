@@ -18,6 +18,18 @@ cd atlas
 cp .env.example .env
 ```
 
+Set your git identity so your commits are attributed to **your** GitHub account:
+
+```bash
+git config user.name "Your Name"
+git config user.email "YOUR_ID+YOUR_USERNAME@users.noreply.github.com"
+```
+
+Find your exact noreply address at **GitHub → Settings → Emails**. Use it rather than a personal
+address — it attributes commits correctly and keeps your real email out of a public repository. If you
+commit with an email GitHub doesn't recognise, your work shows up as an unlinked author and you get no
+credit for it.
+
 `.env` is gitignored and must stay that way. It contains local development values only — never a real
 credential, in any environment.
 
