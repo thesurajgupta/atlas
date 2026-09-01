@@ -1,0 +1,77 @@
+# ATLAS code owners.
+#
+# ---------------------------------------------------------------------------
+# READ THIS FIRST: this file does NOT restrict who can change what.
+#
+# Anyone on the team can contribute to any part of this codebase. CODEOWNERS
+# only auto-requests a reviewer so changes reach someone with context — it is a
+# COORDINATION tool, not a permission system.
+#
+# "Require review from Code Owners" is deliberately NOT enabled on main. Any
+# teammate's approval satisfies branch protection. If you want to improve the
+# ML pipeline, the map, the audit chain or the docs, open a PR — you do not
+# need to own the area.
+#
+# The exception is judgement, not permission: for the sensitive paths at the
+# bottom, please wait for the listed reviewer rather than merging on the first
+# approval you get. Those are the areas where a subtle mistake is expensive and
+# hard to detect later.
+# ---------------------------------------------------------------------------
+
+# Default reviewer for anything not matched below.
+*                                   @thesurajgupta
+
+# ---------------------------------------------------------------------------
+# Areas. These are "who probably has context", not "who is allowed".
+# As teammates join, add their handles here so review requests spread out
+# instead of all landing on one person.
+# ---------------------------------------------------------------------------
+
+# Platform / backend
+/apps/api/atlas/core/               @thesurajgupta
+/apps/api/atlas/ingest/             @thesurajgupta
+/apps/api/atlas/complaints/         @thesurajgupta
+/apps/api/atlas/graph/              @thesurajgupta
+/apps/api/atlas/cases/              @thesurajgupta
+
+# Data & simulator
+/simulator/                         @thesurajgupta
+/data/                              @thesurajgupta
+
+# ML
+/apps/api/atlas/features/           @thesurajgupta
+/apps/api/atlas/predict/            @thesurajgupta
+/apps/api/atlas/entity/             @thesurajgupta
+/ml/                                @thesurajgupta
+
+# Frontend / GIS
+/apps/web/                          @thesurajgupta
+/apps/api/atlas/geo/                @thesurajgupta
+
+# Infra / CI
+/infra/                             @thesurajgupta
+/.github/workflows/                 @thesurajgupta
+
+# ---------------------------------------------------------------------------
+# Sensitive paths — please wait for this reviewer.
+#
+# Not because others can't touch them, but because the failure modes here are
+# quiet: a weakened leakage gate still passes CI, a broken authorization check
+# still returns 200, and a hand-edited metric still renders. These are the
+# places where being wrong doesn't look like being wrong.
+# ---------------------------------------------------------------------------
+/apps/api/atlas/iam/                @thesurajgupta
+/apps/api/atlas/audit/              @thesurajgupta
+/apps/api/atlas/intel/              @thesurajgupta
+/tests/security/                    @thesurajgupta
+/tests/leakage/                     @thesurajgupta
+/tests/fairness/                    @thesurajgupta
+/ml/evaluation/                     @thesurajgupta
+
+# Governing documents — changing these changes what the project IS.
+/docs/ATLAS_MASTER_SPEC.md          @thesurajgupta
+/docs/adr/                          @thesurajgupta
+/docs/problem-statement/            @thesurajgupta
+/PUBLIC_REPOSITORY_SECURITY_BOUNDARY.md  @thesurajgupta
+/SECURITY.md                        @thesurajgupta
+/CODEOWNERS                         @thesurajgupta

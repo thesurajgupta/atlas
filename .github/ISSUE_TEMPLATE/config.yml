@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/thesurajgupta/atlas/security/advisories/new
+    about: >-
+      Do NOT open a public issue for a vulnerability. Report it privately here.
+      This includes ground-truth leakage into the prediction path and any way to
+      enumerate low-risk areas beyond your authorised scope.
+  - name: Master specification
+    url: https://github.com/thesurajgupta/atlas/blob/main/docs/ATLAS_MASTER_SPEC.md
+    about: Read this before proposing an architectural change. Most questions are answered here.
+  - name: How to contribute
+    url: https://github.com/thesurajgupta/atlas/blob/main/CONTRIBUTING.md
+    about: Clone, branch, commit, push, open a PR — exact commands.

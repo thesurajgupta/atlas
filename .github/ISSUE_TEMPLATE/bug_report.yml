@@ -1,0 +1,47 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you observed, and what you expected instead.
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. make up
+        2. ...
+        3. Observed: ...
+    validations: { required: true }
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Best guess is fine — nobody is locked to an area.
+      options:
+        - API / backend
+        - ML / prediction
+        - Simulator / data
+        - Frontend / GIS
+        - Security / auth / audit
+        - Infra / CI
+        - Docs
+        - Not sure
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Paste relevant output. **Redact anything that looks like a credential.**
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Before submitting
+      options:
+        - label: This contains no secrets, credentials, or real personal/financial data
+          required: true

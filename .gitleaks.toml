@@ -1,0 +1,16 @@
+# ATLAS gitleaks configuration (ADR-010).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Paths and deliberate placeholders that are not secrets"
+paths = [
+  '''\.venv/''',
+  '''node_modules/''',
+  '''\.git/''',
+  '''docs/archive/''',
+]
+regexes = [
+  '''change-me-locally''',
+  '''generate-a-random-value-locally''',
+]

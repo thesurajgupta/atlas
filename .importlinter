@@ -1,0 +1,71 @@
+# Module boundaries (ADR-009). These are enforced in CI; an unenforced boundary is a comment.
+[importlinter]
+root_packages = atlas, simulator
+include_external_packages = False
+
+# ---------------------------------------------------------------------------
+# The single most important contract in this file.
+#
+# If the feature or prediction pipeline can import the simulator, it can reach
+# the hidden ground truth, and every metric this project reports becomes
+# worthless. Spec §19.3, gate 1 of 3.
+# ---------------------------------------------------------------------------
+[importlinter:contract:no-truth-in-serving-path]
+name = Serving path must never import the simulator
+type = forbidden
+source_modules =
+    atlas.features
+    atlas.predict
+    atlas.geo
+    atlas.alerts
+    atlas.intel
+    atlas.cases
+    atlas.complaints
+    atlas.ingest
+    atlas.graph
+    atlas.entity
+    atlas.iam
+    atlas.audit
+forbidden_modules =
+    simulator
+allow_indirect_imports = False
+
+# ---------------------------------------------------------------------------
+# Layering: core depends on nothing; higher layers may use lower ones.
+# ---------------------------------------------------------------------------
+[importlinter:contract:layers]
+name = ATLAS module layering
+type = layers
+layers =
+    atlas.intel
+    atlas.alerts
+    atlas.cases
+    atlas.predict
+    atlas.features
+    atlas.geo | atlas.graph | atlas.entity
+    atlas.complaints
+    atlas.ingest
+    atlas.audit | atlas.iam
+    atlas.core
+
+# ---------------------------------------------------------------------------
+# core is a leaf. If core imports a domain module, the dependency graph has
+# inverted and the boundaries will erode from there.
+# ---------------------------------------------------------------------------
+[importlinter:contract:core-is-independent]
+name = atlas.core must not depend on any domain module
+type = forbidden
+source_modules = atlas.core
+forbidden_modules =
+    atlas.iam
+    atlas.ingest
+    atlas.complaints
+    atlas.entity
+    atlas.graph
+    atlas.features
+    atlas.predict
+    atlas.geo
+    atlas.cases
+    atlas.alerts
+    atlas.intel
+    atlas.audit

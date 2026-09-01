@@ -1,0 +1,56 @@
+# ATLAS pre-commit hooks. MANDATORY for all contributors (ADR-010).
+#   pip install pre-commit && pre-commit install
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+      - id: detect-private-key          # non-negotiable
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+
+  # Secret scanning. The most important hook in this file.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  # ATLAS-specific gates.
+  - repo: local
+    hooks:
+      - id: no-real-data
+        name: block files that look like real data
+        entry: scripts/hooks/no_real_data.py
+        language: system
+        pass_filenames: true
+
+      - id: spec-refs
+        name: spec cross-references resolve
+        entry: python3 scripts/check_spec_refs.py
+        language: system
+        pass_filenames: false
+        files: ^docs/(ATLAS_MASTER_SPEC\.md|adr/)
+
+      - id: traceability
+        name: requirements traceability is complete
+        entry: python3 scripts/check_traceability.py
+        language: system
+        pass_filenames: false
+        files: ^docs/problem-statement/

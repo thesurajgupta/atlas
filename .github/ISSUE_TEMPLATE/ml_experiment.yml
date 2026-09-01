@@ -1,0 +1,39 @@
+name: ML experiment
+description: Propose or report a modelling experiment
+labels: ["ml", "experiment"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **A negative result is a real result.** An experiment showing that a fancier model
+        does not beat the baseline is worth recording — it saves the team from trying it
+        again, and it goes in the model card.
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      placeholder: "Adding graph centrality features improves Tier 2 Recall@5 over the current model."
+    validations: { required: true }
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Which tier
+      options: ["Tier 1 — zone forecast", "Tier 2 — case-conditioned ranking", "Tier 3 — entity/endpoint risk", "Cross-cutting"]
+    validations: { required: true }
+  - type: textarea
+    id: baseline
+    attributes:
+      label: What are you comparing against
+      description: The headline number is always **uplift over baseline**, never raw accuracy.
+    validations: { required: true }
+  - type: checkboxes
+    id: honesty
+    attributes:
+      label: Honesty checks
+      options:
+        - label: Temporal splits only — no random splitting of time-series data
+          required: true
+        - label: All five leakage gates pass (spec §19)
+          required: true
+        - label: Numbers will come from `make eval`, not typed by hand
+          required: true

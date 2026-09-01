@@ -1,0 +1,77 @@
+# ---- Secrets: never commit ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets/
+credentials/
+*_rsa
+*_ed25519
+service-account*.json
+
+# ---- Audit signing keys (ADR-007) ----
+keys/
+*.signing.key
+
+# ---- Real data: never commit (ADR-010) ----
+data/real/
+data/production/
+data/restricted/
+*.ncrp
+*.cfcfrms
+
+# ---- Generated synthetic datasets (regenerate from seed, don't commit) ----
+data/synthetic/*.parquet
+data/synthetic/*.csv
+data/synthetic/*.db
+!data/synthetic/.gitkeep
+
+# ---- Trained models ----
+ml/models/*.pkl
+ml/models/*.joblib
+ml/models/*.txt
+ml/models/*.onnx
+!ml/models/.gitkeep
+mlruns/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ---- Node ----
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Local infra state ----
+.terraform/
+*.tfstate
+*.tfstate.*
+pgdata/
+redisdata/
+
+# ---- Reports: keep committed evaluation reports, ignore scratch ----
+reports/scratch/
+*.log

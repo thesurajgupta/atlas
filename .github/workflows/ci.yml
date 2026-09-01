@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Gate 1: the repository must be safe to publish. Runs first and alone,
+  # because nothing else matters if a secret has leaked (ADR-010).
+  # ---------------------------------------------------------------------
+  secrets:
+    name: Secret scan (full history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history — a removed secret is still a secret
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: .env must not be tracked
+        run: |
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "::error::.env is tracked. Remove it and rotate every value in it."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------
+  # Gate 2: documentation integrity. Cheap, and catches spec drift early.
+  # ---------------------------------------------------------------------
+  docs:
+    name: Spec & traceability
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python scripts/check_spec_refs.py
+      - run: python scripts/check_traceability.py
+
+  # ---------------------------------------------------------------------
+  # Gate 3: infrastructure definitions are valid.
+  # ---------------------------------------------------------------------
+  compose:
+    name: Compose validity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+
+  # ---------------------------------------------------------------------
+  # Gate 4: code quality. Skips cleanly until the Python project exists.
+  # ---------------------------------------------------------------------
+  quality:
+    name: Lint, types, module boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Detect project
+        id: detect
+        run: |
+          if [ -f apps/api/pyproject.toml ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
+          else echo "ready=false" >> "$GITHUB_OUTPUT"; echo "::notice::Python project not created yet (phase 1)"; fi
+      - if: steps.detect.outputs.ready == 'true'
+        run: pip install -e "apps/api[dev]"
+      - if: steps.detect.outputs.ready == 'true'
+        run: ruff check apps/api simulator ml tests
+      - if: steps.detect.outputs.ready == 'true'
+        run: mypy apps/api
+      - name: Module boundaries (ADR-009)
+        if: steps.detect.outputs.ready == 'true'
+        run: lint-imports
+
+  # ---------------------------------------------------------------------
+  # Gate 5: tests, including the honesty gates.
+  # ---------------------------------------------------------------------
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Detect project
+        id: detect
+        run: |
+          if [ -f apps/api/pyproject.toml ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
+          else echo "ready=false" >> "$GITHUB_OUTPUT"; echo "::notice::Test suite not created yet (phase 1)"; fi
+      - if: steps.detect.outputs.ready == 'true'
+        run: pip install -e "apps/api[dev]"
+      - if: steps.detect.outputs.ready == 'true'
+        run: pytest tests/unit tests/integration -q
+
+      # These must never be allowed to "skip" silently once implemented.
+      - name: Leakage gates (spec §19)
+        if: steps.detect.outputs.ready == 'true'
+        run: pytest tests/leakage -q
+      - name: Security suite
+        if: steps.detect.outputs.ready == 'true'
+        run: pytest tests/security -q
+      - name: Fairness — no protected attributes (spec §22.2)
+        if: steps.detect.outputs.ready == 'true'
+        run: pytest tests/fairness -q
+
+  # ---------------------------------------------------------------------
+  # Gate 6: supply chain.
+  # ---------------------------------------------------------------------
+  supply-chain:
+    name: Dependency scan, SAST, SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: SAST
+        uses: github/codeql-action/init@v3
+        with: { languages: python, javascript }
+      - uses: github/codeql-action/analyze@v3
+      - name: SBOM
+        uses: anchore/sbom-action@v0
+        with: { format: cyclonedx-json, artifact-name: atlas-sbom.cdx.json }

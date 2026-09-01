@@ -1,0 +1,19 @@
+name: Documentation
+description: Something is unclear, wrong, or missing in the docs
+labels: ["documentation"]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Which document
+      placeholder: "docs/ATLAS_MASTER_SPEC.md §21.4"
+    validations: { required: true }
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong or missing
+    validations: { required: true }
+  - type: markdown
+    attributes:
+      value: |
+        If it's a small fix, please just open a PR — you don't need an issue first.

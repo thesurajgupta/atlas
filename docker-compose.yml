@@ -1,0 +1,92 @@
+# ATLAS local development stack.
+#
+# The core profile must start OFFLINE on a laptop and is all the demo needs.
+# Everything else lives behind an optional profile (master spec §7.2).
+
+services:
+  postgres:
+    build:
+      context: ./infra/docker/postgres
+    image: atlas/postgres:16-postgis-h3-timescale
+    container_name: atlas-postgres
+    environment:
+      POSTGRES_DB: atlas
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: ${ATLAS_DB_PASSWORD:-change-me-locally}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      # Host port is configurable: 5432 is frequently already in use locally.
+      - "${ATLAS_DB_PORT_HOST:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: atlas-redis
+    # AOF on: Redis carries the event bus (ADR-003), so durability is required.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "${ATLAS_REDIS_PORT_HOST:-56379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # ---- Optional: observability (master spec §39) ----
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: atlas-prometheus
+    profiles: ["observability"]
+    ports: ["9090:9090"]
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: atlas-grafana
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+
+  # ---- Optional: S3-compatible object storage ----
+  minio:
+    image: minio/minio:latest
+    container_name: atlas-minio
+    profiles: ["storage"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-atlasadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-change-me-locally}
+    ports: ["9000:9000", "9001:9001"]
+    volumes:
+      - miniodata:/data
+
+  # ---- Optional: proves the IdentityProvider port is real (ADR-006) ----
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: atlas-keycloak
+    profiles: ["keycloak"]
+    command: ["start-dev"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD:-change-me-locally}
+    ports: ["8081:8080"]
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

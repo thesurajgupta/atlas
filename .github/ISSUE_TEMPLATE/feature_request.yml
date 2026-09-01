@@ -1,0 +1,31 @@
+name: Feature or improvement
+description: Propose something new — anywhere in the project
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Anyone can propose anything, in any part of the codebase. You do not need to
+        own an area to suggest a change to it.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Start with the problem, not the solution.
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+    validations: { required: true }
+  - type: input
+    id: spec
+    attributes:
+      label: Related spec section
+      description: e.g. §21.3, or "new" if the spec doesn't cover it yet.
+  - type: dropdown
+    id: size
+    attributes:
+      label: Rough size
+      options: ["Small (< half a day)", "Medium (1-2 days)", "Large (needs an ADR)"]
+    validations: { required: true }

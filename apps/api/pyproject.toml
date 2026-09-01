@@ -1,0 +1,103 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-api"
+version = "0.1.0"
+description = "ATLAS — predictive cash-out intelligence for cybercrime complaints (SIH26184)"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "sqlalchemy[asyncio]>=2.0.36",
+  "asyncpg>=0.30",
+  "alembic>=1.14",
+  "redis>=5.2",
+  "argon2-cffi>=23.1",          # password hashing (ADR-006)
+  "pyjwt[crypto]>=2.10",        # tokens + checkpoint signing (ADR-007)
+  "pyotp>=2.9",                 # TOTP MFA
+  "structlog>=24.4",            # structured JSON logs, no sensitive values
+  "h3>=4.1",                    # prediction lattice (ADR-011)
+  "shapely>=2.0",
+  "python-multipart>=0.0.17",
+]
+
+[project.optional-dependencies]
+ml = [
+  "scikit-learn>=1.5",
+  "lightgbm>=4.5",
+  "xgboost>=2.1",
+  "shap>=0.46",
+  "lifelines>=0.30",            # discrete-time hazard for the predicted window
+  "pandas>=2.2",
+  "numpy>=2.0",
+  "pyarrow>=18.0",
+]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "pytest-cov>=6.0",
+  "httpx>=0.28",
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "import-linter>=2.1",         # module boundaries (ADR-009)
+  "types-redis",
+  "pyyaml>=6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas*"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "migrations"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",      # pycodestyle
+  "F",           # pyflakes
+  "I",           # isort
+  "B",           # bugbear
+  "UP",          # pyupgrade
+  "S",           # bandit — security lint matters here
+  "ASYNC",
+  "DTZ",         # naive datetimes are a bug in a temporal prediction system
+  "T20",         # no print()
+  "RET", "SIM", "PTH",
+]
+ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "T20"]
+"simulator/**" = ["S311"]   # non-crypto RNG is correct for a simulator
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["h3.*", "shap.*", "lightgbm.*", "lifelines.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["../../tests"]
+markers = [
+  "leakage: ground-truth leakage gates (spec §19) — must never be skipped",
+  "security: security control tests",
+  "fairness: prohibited-feature and disparity tests",
+  "slow: excluded from the fast pre-push loop",
+]
