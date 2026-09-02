@@ -24,6 +24,7 @@ dependencies = [
   "structlog>=24.4",            # structured JSON logs, no sensitive values
   "h3>=4.1",                    # prediction lattice (ADR-011)
   "shapely>=2.0",
+  "geoalchemy2>=0.15",       # PostGIS column types for SQLAlchemy models
   "python-multipart>=0.0.17",
 ]
 

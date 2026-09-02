@@ -48,9 +48,10 @@ verify: verify-docs verify-compose verify-secrets lint typecheck verify-boundari
 	@echo ""
 	@echo "  ✅  verify passed"
 
-verify-docs: ## Check spec cross-references and requirements traceability
+verify-docs: ## Check spec cross-references, traceability and declared dependencies
 	@$(PY) scripts/check_spec_refs.py
 	@$(PY) scripts/check_traceability.py
+	@$(PY) scripts/check_dependencies.py
 
 verify-compose: ## Validate the docker-compose definition
 	@docker compose config --quiet && echo "  ✓ docker-compose valid"
