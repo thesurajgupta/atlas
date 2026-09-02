@@ -12,6 +12,7 @@ divergent copies would mean one of them is wrong and nobody would know which.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 #: Protected attributes under Indian equality law and constitutional protections.
 PROTECTED_ATTRIBUTES: frozenset[str] = frozenset(
@@ -81,9 +82,7 @@ def _tokenise(name: str) -> list[str]:
 # match as a contiguous phrase, because neither "mother" nor "tongue" is
 # prohibited on its own.
 _SINGLE_TOKEN: frozenset[str] = frozenset(t for t in PROHIBITED if "_" not in t)
-_PHRASES: tuple[tuple[str, ...], ...] = tuple(
-    tuple(t.split("_")) for t in PROHIBITED if "_" in t
-)
+_PHRASES: tuple[tuple[str, ...], ...] = tuple(tuple(t.split("_")) for t in PROHIBITED if "_" in t)
 
 
 def is_prohibited(field_name: str) -> bool:
@@ -108,6 +107,6 @@ def is_prohibited(field_name: str) -> bool:
     return False
 
 
-def find_prohibited(field_names: object) -> list[str]:
+def find_prohibited(field_names: Iterable[str]) -> list[str]:
     """Return every prohibited name in an iterable of field names."""
-    return sorted(n for n in field_names if isinstance(n, str) and is_prohibited(n))  # type: ignore[union-attr]
+    return sorted(name for name in field_names if is_prohibited(name))
