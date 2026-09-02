@@ -60,6 +60,13 @@ line-length = 100
 target-version = "py311"
 extend-exclude = [".venv", "migrations"]
 
+[tool.ruff.format]
+# Alembic writes these. `ruff format` has no per-file-ignore mechanism (that is
+# lint-only), so the exclusion belongs here to match the lint treatment below.
+# Formatting generated output would otherwise have to be repeated by hand after
+# every `alembic revision --autogenerate`, which is a footgun waiting to fire.
+exclude = ["alembic/versions/*.py"]
+
 [tool.ruff.lint]
 select = [
   "E", "W",      # pycodestyle

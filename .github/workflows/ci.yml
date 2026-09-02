@@ -130,15 +130,60 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+
+      # PostGIS + H3 + TimescaleDB is a custom image, so it cannot be a
+      # `services:` entry (those need a pre-built image from a registry). It is
+      # built and run explicitly instead.
+      #
+      # This matters more than convenience: the leakage boundary and the
+      # append-only audit constraint are enforced by *database privileges*.
+      # Without a real database those tests do not run, and the gates that make
+      # this project honest would be silently absent from CI.
+      - name: Cache Postgres image layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: pg-${{ hashFiles('infra/docker/postgres/Dockerfile') }}
+
+      - name: Build Postgres image
+        run: docker compose build postgres
+
+      - name: Start Postgres
+        run: |
+          docker compose up -d postgres
+          for i in $(seq 1 60); do
+            if docker compose exec -T postgres pg_isready -U atlas -d atlas >/dev/null 2>&1; then
+              echo "postgres ready after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::postgres did not become ready"; docker compose logs postgres; exit 1
+
       - run: pip install -e "apps/api[dev]"
+
+      - name: Run migrations
+        working-directory: apps/api
+        run: alembic upgrade head
+
+      - name: Verify no schema drift
+        working-directory: apps/api
+        run: alembic check
+
       - name: Unit and integration
         run: pytest tests/unit tests/integration -q
-      - name: Leakage gates (spec §19) — all five
+      - name: Leakage gates (spec §19)
         run: pytest tests/leakage -q
       - name: Security suite
         run: pytest tests/security -q
       - name: Fairness — no protected attributes (spec §22.2)
         run: pytest tests/fairness -q
+
+    env:
+      ATLAS_DB_HOST: localhost
+      ATLAS_DB_PORT: 55432
+      ATLAS_DB_USER: atlas
+      ATLAS_DB_PASSWORD: change-me-locally
+      ATLAS_REDIS_URL: redis://localhost:6379/0
 
   # ---------------------------------------------------------------------
   # Gate 6: supply chain. Trivy always runs; CodeQL needs source.
