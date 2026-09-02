@@ -78,6 +78,9 @@ ignore = ["S101"]  # assert is fine in tests
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "T20"]
 "simulator/**" = ["S311"]   # non-crypto RNG is correct for a simulator
+# Alembic writes these files. Reformatting generated output by hand is churn and
+# produces diffs that obscure the actual schema change under review.
+"alembic/versions/*.py" = ["E501", "I001", "W291", "W293"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]
@@ -91,13 +94,4 @@ plugins = ["pydantic.mypy"]
 module = ["h3.*", "shap.*", "lightgbm.*", "lifelines.*"]
 ignore_missing_imports = true
 
-# ---------------------------------------------------------------- pytest
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["../../tests"]
-markers = [
-  "leakage: ground-truth leakage gates (spec §19) — must never be skipped",
-  "security: security control tests",
-  "fairness: prohibited-feature and disparity tests",
-  "slow: excluded from the fast pre-push loop",
-]
+# pytest configuration lives in the repo-root pytest.ini (tests/ is not under apps/api)

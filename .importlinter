@@ -1,6 +1,8 @@
 # Module boundaries (ADR-009). These are enforced in CI; an unenforced boundary is a comment.
 [importlinter]
-root_packages = atlas, simulator
+root_packages =
+    atlas
+    simulator
 include_external_packages = False
 
 # ---------------------------------------------------------------------------

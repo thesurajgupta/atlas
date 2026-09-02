@@ -8,6 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- One schema per module (ADR-009). Cross-schema reads are forbidden by convention
 -- and enforced at the application layer by import-linter.
+CREATE SCHEMA IF NOT EXISTS core;   -- shared types + alembic version table
 CREATE SCHEMA IF NOT EXISTS iam;
 CREATE SCHEMA IF NOT EXISTS ingest;
 CREATE SCHEMA IF NOT EXISTS complaints;
