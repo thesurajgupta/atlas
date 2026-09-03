@@ -12,6 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "apps" / "api"))
+# simulator/ is a top-level package (deliberately outside apps/api — see
+# simulator/__init__.py on why it must stay unimportable from atlas.* itself), so it needs
+# its own sys.path entry to be importable from tests.
+sys.path.insert(0, str(REPO_ROOT))
 
 from atlas.core.config import get_settings
 
