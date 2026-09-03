@@ -57,20 +57,32 @@ git switch main && git pull
 ```
 
 ```bash
-git switch -c feat/short-description
+git switch -c yourname/short-task-description
 ```
 
-Branch naming — the prefix tells reviewers what kind of review it needs:
+**Branch naming: `yourname/what-you-are-doing`.**
 
-| Prefix | For |
-|---|---|
-| `feat/` | New functionality |
-| `fix/` | Bug fix |
-| `ml/` | Model, features, evaluation |
-| `docs/` | Documentation |
-| `infra/` | CI, Docker, tooling |
-| `sec/` | Security |
-| `refactor/` | No behaviour change |
+```
+sneha/geography-endpoints
+vijay/upi-fraud-generator
+vidushi/pai-metrics
+lucky/h3-risk-layer
+raj/graph-explorer
+```
+
+Your name means everyone can see at a glance whose work is in flight. The task
+half is the important half.
+
+**One branch per task, not one branch per person.** This matters more than it looks:
+
+- A branch that lives for weeks drifts from `main`, and merging it becomes a large, frightening
+  conflict nobody wants to resolve.
+- A branch holding several unrelated changes cannot be reviewed properly — and if one part has a
+  problem, the good parts are stuck behind it too.
+- Small branches get reviewed in ten minutes. Large ones sit for days.
+
+Finish a task, merge it, delete the branch, start a new one. Roughly a day's work per branch is a good
+target.
 
 Then work, and commit as you go:
 
@@ -101,9 +113,10 @@ No `gh`? Push, then open the link GitHub prints in the terminal output.
 ## 3. While your PR is open
 
 - CI runs automatically. It must be green.
-- One approval from any teammate is required. **Any teammate — not a specific one.**
-- A reviewer is auto-requested based on `CODEOWNERS`. That is a hint about who has context, **not** a
-  restriction on who may approve.
+- **An approval from @thesurajgupta is required.** He is the code owner for the repository, and GitHub
+  enforces this — a teammate's approval alone will not let the PR merge.
+- Other teammates reviewing is still genuinely valuable. Two sets of eyes catch more, and reading
+  someone else's PR is the fastest way to learn a part of the system you have not touched.
 - Address comments with more commits. Don't force-push once review has started — it makes the
   reviewer re-read everything.
 
