@@ -16,6 +16,7 @@ include_external_packages = False
 name = Serving path must never import the simulator
 type = forbidden
 source_modules =
+    atlas.app
     atlas.features
     atlas.predict
     atlas.geo
@@ -39,6 +40,7 @@ allow_indirect_imports = False
 name = ATLAS module layering
 type = layers
 layers =
+    atlas.app
     atlas.intel
     atlas.alerts
     atlas.cases
@@ -47,7 +49,8 @@ layers =
     atlas.geo | atlas.graph | atlas.entity
     atlas.complaints
     atlas.ingest
-    atlas.audit | atlas.iam
+    atlas.iam
+    atlas.audit
     atlas.core
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,9 @@ dependencies = [
   "shapely>=2.0",
   "geoalchemy2>=0.15",       # PostGIS column types for SQLAlchemy models
   "python-multipart>=0.0.17",
+  # Imported directly for BaseHTTPMiddleware. It arrives transitively via
+  # FastAPI, but a direct import deserves a direct declaration.
+  "starlette>=0.41",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +50,7 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "pytest-cov>=6.0",
-  "httpx>=0.28",
+  "httpx>=0.28",           # FastAPI TestClient
   "ruff>=0.8",
   "mypy>=1.13",
   "import-linter>=2.1",         # module boundaries (ADR-009)
