@@ -201,9 +201,9 @@ Opening a draft PR early to ask "am I going the right way?" is encouraged and co
 
 ## 8. Working with an AI assistant
 
-Most of us are. [`AI_PUSH_PROMPT.md`](AI_PUSH_PROMPT.md) has a prompt to paste when your work is ready
-to push — it carries the constraints that actually go wrong, chief among them: *never weaken a check to
-make it pass*.
+Most of us are. [`AI_PROMPTS.md`](AI_PROMPTS.md) has two prompts: one for **starting** a task (it makes your assistant
+confirm you actually have write access and that your git identity is right, before you write anything)
+and one for **pushing**. The line that matters most: *never weaken a check to make it pass*.
 
 The repo also ships context files that load automatically — `CLAUDE.md` for Claude Code, `.cursorrules`
 for Cursor, `.github/copilot-instructions.md` for Copilot, `AGENTS.md` and `.windsurfrules` for others.
