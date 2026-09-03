@@ -36,6 +36,9 @@ allow_indirect_imports = False
 # ---------------------------------------------------------------------------
 # Layering: core depends on nothing; higher layers may use lower ones.
 # ---------------------------------------------------------------------------
+# Ingest sits ABOVE complaints: it produces them, so it depends on the complaint
+# model. The data *flows* ingest -> complaints, but the dependency points the
+# other way, and it is the dependency that a layering contract describes.
 [importlinter:contract:layers]
 name = ATLAS module layering
 type = layers
@@ -47,8 +50,8 @@ layers =
     atlas.predict
     atlas.features
     atlas.geo | atlas.graph | atlas.entity
-    atlas.complaints
     atlas.ingest
+    atlas.complaints
     atlas.iam
     atlas.audit
     atlas.core
