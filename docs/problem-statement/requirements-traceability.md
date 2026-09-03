@@ -97,9 +97,9 @@ clause above that it strengthens — none is scope creep.
 | Investigative-utility metrics | "faster fund blocking", "chances of recovery" | evaluation harness | `ML-UTILITY-001` | PLANNED |
 | Entity resolution, versioned and point-in-time correct | "analyse historical cybercrime and financial data" | `atlas.entity` | `INT-ENT-001` | PLANNED |
 | Point-in-time entity join (leakage gate 4) | honest prediction; guards `ML-*` | `atlas.entity`, `atlas.features` | `LEAK-004` | PLANNED |
-| Dynamic risk for all entity types | "pattern detection" | `atlas.entity` | `ML-ENTRISK-001` | PLANNED |
+| Dynamic risk for all entity types | "pattern detection" | `atlas.entity` | `ML-ENTRISK-001` | IMPLEMENTED |
 | Artefact nodes in the graph | "intelligence sharing across jurisdictions" | `atlas.graph` | `INT-GRAPH-002` | IMPLEMENTED |
-| Artefact edges excluded from features | honest prediction | `atlas.features` | `LEAK-005` | PLANNED |
+| Artefact edges excluded from features | honest prediction | `atlas.graph` | `LEAK-005` | IMPLEMENTED |
 | Network case grouping with quantitative reason | proactive intervention at scale; alert-fatigue control | `atlas.alerts` | `INT-GROUP-001` | PLANNED |
 | Grouping is human-accepted and splittable | jurisdictional ownership integrity | `atlas.cases` | `INT-GROUP-002` | PLANNED |
 | Recommended next step with reason | "proactive interventions" | `atlas.cases` | `INT-CASE-NEXT-001` | PLANNED |

@@ -1,5 +1,7 @@
 """Artefact edges are withheld from the feature pipeline (master spec §14.1, §22.1).
 
+Traceability: ``LEAK-005``.
+
 A ``Prediction`` node linked to a ``Case`` is investigative context. Allowing it
 into the feature pipeline lets the model read its own prior output back as
 evidence: it predicted this endpoint, an alert was raised, the alert is now a
