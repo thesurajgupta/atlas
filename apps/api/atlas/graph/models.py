@@ -27,7 +27,7 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from atlas.core.database import Base
-from atlas.core.enums import CashOutChannel, EdgeType
+from atlas.core.enums import CashOutChannel, EdgeType, NodeKind
 from atlas.core.mixins import ObservationBase
 
 SCHEMA = "graph"
@@ -114,3 +114,87 @@ class TransactionEdge(ObservationBase, Base):
     # added faster than a deployment cycle, and an unknown rail must be storable
     # rather than rejected.
     rail: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
+
+class ArtefactLink(ObservationBase, Base):
+    """A typed link where at least one end is an investigative artefact.
+
+    Spec §14.1 calls this the single highest-leverage change to the graph model,
+    and the reason is operational rather than architectural: it turns "this
+    complaint connects to a case opened in another state four months ago through
+    a shared endpoint" from a report somebody has to run into a traversal that
+    is simply there.
+
+    **Polymorphic, with no foreign keys, and that is forced rather than chosen.**
+    ``graph`` sits below ``cases``, ``alerts`` and ``predict`` in the layering
+    contract (ADR-009), so it cannot import their models — and a foreign key to
+    a table this module may not know about is not available to it. The honest
+    consequence is that the database cannot stop a link pointing at a deleted
+    case; that has to be checked, not assumed, and
+    ``tests/integration/test_artefact_neighbourhood.py`` does exactly that —
+    reporting the node kinds whose owning table does not exist yet as
+    *unchecked*, rather than letting a coverage gap read as a clean result.
+
+    The alternative was materialising every artefact into a node table owned by
+    ``graph``. That would buy referential integrity and cost a second copy of
+    every complaint and case — and, more seriously, a second place for an
+    authorization check to be forgotten. Duplicated authority is a worse failure
+    mode than a dangling row.
+    """
+
+    __tablename__ = "artefact_link"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_kind",
+            "source_id",
+            "target_kind",
+            "target_id",
+            "edge_type",
+            name="uq_artefact_link_unique_edge",
+        ),
+        CheckConstraint(
+            "NOT (source_kind = target_kind AND source_id = target_id)",
+            name="ck_artefact_link_no_self_loop",
+        ),
+        Index("ix_artefact_link_source", "source_kind", "source_id"),
+        Index("ix_artefact_link_target", "target_kind", "target_id"),
+        Index("ix_artefact_link_observed_at_id", "observed_at", "id"),
+        {"schema": SCHEMA},
+    )
+
+    source_kind: Mapped[NodeKind] = mapped_column(
+        Enum(NodeKind, name="node_kind", schema=SCHEMA), nullable=False
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    target_kind: Mapped[NodeKind] = mapped_column(
+        Enum(NodeKind, name="node_kind", schema=SCHEMA, create_type=False), nullable=False
+    )
+    target_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+
+    edge_type: Mapped[EdgeType] = mapped_column(
+        Enum(EdgeType, name="edge_type", schema=SCHEMA, create_type=False), nullable=False
+    )
+
+    # Which jurisdiction owns each end. Denormalised deliberately: the
+    # authorization decision for a cross-jurisdiction traversal has to be made
+    # without reading the far row, because reading it is the thing being
+    # authorized. Kept in step by the owning module when an artefact moves.
+    #
+    # Both ends are stored, not just the target. Links are directed, but a
+    # traversal is not — an investigator asking what their complaint touches
+    # means both directions — and the backward hop needs the source's
+    # jurisdiction to authorize against. Storing only one end made every
+    # backward link redact, including links from inside the viewer's own
+    # district: fail-closed, and wrong.
+    source_jurisdiction_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), nullable=True
+    )
+    target_jurisdiction_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), nullable=True
+    )
+
+    # Why this link exists, as a sentence an investigator can weigh — "both
+    # reached BC agent HR-0142 within 90 minutes". Never a bare score: a link an
+    # investigator cannot interrogate is one they will either over-trust or
+    # ignore, and both are worse than no link (spec §28.4).
+    basis: Mapped[str] = mapped_column(String(280), nullable=False)
