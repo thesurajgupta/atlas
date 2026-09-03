@@ -171,3 +171,46 @@ async def test_empty_batch_is_not_suspect(session: AsyncSession) -> None:
     outcome = await ingest_complaints(session, SyntheticComplaintConnector([]))
     assert outcome.suspect is False
     assert outcome.report.total == 0
+
+
+async def test_accepted_complaints_are_published(
+    session: AsyncSession, jurisdiction
+) -> None:  # type: ignore[no-untyped-def]
+    """Downstream stages react to events; ingestion need not know they exist."""
+    from atlas.core.events import STREAM_COMPLAINTS, InMemoryEventBus
+
+    bus = InMemoryEventBus()
+    ref = f"CMP-SYN-{uuid.uuid4().hex[:6]}"
+    await ingest_complaints(
+        session, SyntheticComplaintConnector([_payload(jurisdiction.id, ref)]), bus=bus
+    )
+
+    published = bus.published.get(STREAM_COMPLAINTS, [])
+    assert len(published) == 1
+    assert published[0].type == "complaint.ingested"
+    assert published[0].payload["public_ref"] == ref
+    # The id must be present, or a consumer cannot fetch the row it describes.
+    assert published[0].payload["complaint_id"]
+
+
+async def test_rejected_records_are_not_published(
+    session: AsyncSession, jurisdiction
+) -> None:  # type: ignore[no-untyped-def]
+    """Publishing a complaint that was never stored would strand every consumer."""
+    from atlas.core.events import STREAM_COMPLAINTS, InMemoryEventBus
+
+    bus = InMemoryEventBus()
+    await ingest_complaints(
+        session,
+        SyntheticComplaintConnector(
+            [
+                _payload(
+                    jurisdiction.id,
+                    f"CMP-SYN-{uuid.uuid4().hex[:6]}",
+                    reported_amount="-1",
+                )
+            ]
+        ),
+        bus=bus,
+    )
+    assert bus.published.get(STREAM_COMPLAINTS, []) == []
