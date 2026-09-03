@@ -57,6 +57,77 @@ class FraudTypology(StrEnum):
     OTHER = "OTHER"
 
 
+class NodeKind(StrEnum):
+    """Closed vocabulary of graph node types (master spec §14.1).
+
+    The financial objects are only half the graph. ``COMPLAINT``, ``CASE``,
+    ``ALERT``, ``PREDICTION`` and ``INTERVENTION`` are node types too, because
+    the cross-jurisdiction linkage the problem statement asks for is a
+    *traversal* — "this complaint reaches a case opened in another state four
+    months ago through a shared endpoint" — not a report.
+
+    Those artefact nodes carry two constraints enforced elsewhere:
+
+    * They are authorization-scoped (§29). A traversal may reveal that a link
+      exists and what type it is; the linked case's contents still require
+      authorization in the owning jurisdiction.
+    * They never feed prediction features (§19, §22.1). A ``PREDICTION`` node
+      linked to a ``CASE`` is investigative context; letting it into the feature
+      pipeline would let the model read its own prior output back as evidence
+      and manufacture confidence.
+    """
+
+    ACCOUNT = "ACCOUNT"
+    WALLET = "WALLET"
+    ENTITY = "ENTITY"
+    MERCHANT = "MERCHANT"
+    CASH_OUT_ENDPOINT = "CASH_OUT_ENDPOINT"
+    BC_AGENT = "BC_AGENT"
+    FINANCIAL_INSTITUTION = "FINANCIAL_INSTITUTION"
+    DEVICE = "DEVICE"
+    NETWORK_INDICATOR = "NETWORK_INDICATOR"
+    GEOGRAPHIC_ZONE = "GEOGRAPHIC_ZONE"
+
+    COMPLAINT = "COMPLAINT"
+    CASE = "CASE"
+    ALERT = "ALERT"
+    PREDICTION = "PREDICTION"
+    INTERVENTION = "INTERVENTION"
+
+
+class EdgeType(StrEnum):
+    """Closed vocabulary of graph edge types (master spec §14.1).
+
+    Closed and labelled on purpose. An unlabelled edge is not an intelligence
+    product, it is a picture of a hairball: "these two accounts are connected"
+    tells an investigator nothing if they cannot see whether the connection is a
+    transfer, a shared device, or a shared owner.
+    """
+
+    TRANSFERRED_TO = "TRANSFERRED_TO"
+    WITHDREW_AT = "WITHDREW_AT"
+    OWNS = "OWNS"
+    HOLDS = "HOLDS"
+    SUBJECT_OF = "SUBJECT_OF"
+    LINKED_ALERT = "LINKED_ALERT"
+    RELATED_CASE = "RELATED_CASE"
+    PREDICTED_FOR = "PREDICTED_FOR"
+    ACTED_ON = "ACTED_ON"
+    SHARES_DEVICE = "SHARES_DEVICE"
+    SHARES_BENEFICIARY = "SHARES_BENEFICIARY"
+
+    @property
+    def moves_money(self) -> bool:
+        """Whether this edge represents value actually moving.
+
+        Trail reconstruction follows only these. ``SHARES_DEVICE`` links two
+        accounts that plausibly share an operator, which is strong intelligence
+        and a terrible trail hop: following it would produce a "money trail"
+        along which no money ever travelled.
+        """
+        return self in (EdgeType.TRANSFERRED_TO, EdgeType.WITHDREW_AT)
+
+
 class CaseStatus(StrEnum):
     """Case lifecycle (master spec §26)."""
 

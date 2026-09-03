@@ -16,7 +16,7 @@ Status: `PLANNED` → `IN_PROGRESS` → `IMPLEMENTED` → `VERIFIED` (test green
 | Clause | Module | Test ID | Status |
 |---|---|---|---|
 | Analyse historical cybercrime data | `atlas.ingest`, `atlas.complaints` | `INT-ING-001` | PLANNED |
-| Analyse financial data / money trail | `atlas.graph` | `INT-GRAPH-001` | PLANNED |
+| Analyse financial data / money trail | `atlas.graph` | `INT-GRAPH-001` | IMPLEMENTED |
 | **Predict potential withdrawal hotspots** | `atlas.predict` Tier 1 | `ML-T1-PAI-001` | PLANNED |
 | Pattern detection | `atlas.features`, `atlas.predict` Tier 3 | `ML-T3-PRAUC-001` | PLANNED |
 | Geospatial risk modelling | `atlas.geo` | `INT-GEO-001` | PLANNED |
