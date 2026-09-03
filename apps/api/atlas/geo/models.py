@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import time
+from decimal import Decimal
 
 from geoalchemy2 import Geometry
 from sqlalchemy import Enum, ForeignKey, Index, Numeric, String, Time, UniqueConstraint
@@ -60,7 +61,7 @@ class CashOutEndpoint(ObservationBase, Base):
 
     opens_at: Mapped[time | None] = mapped_column(Time, nullable=True)
     closes_at: Mapped[time | None] = mapped_column(Time, nullable=True)
-    cash_limit: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    cash_limit: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
 
 
 class GeographicZone(ObservationBase, Base):

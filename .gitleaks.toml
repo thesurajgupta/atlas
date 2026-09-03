@@ -4,6 +4,10 @@ useDefault = true
 
 [allowlist]
 description = "Paths and deliberate placeholders that are not secrets"
+# Match against the whole source line, not the extracted secret fragment.
+# Without this, a regex describing the surrounding code can never match,
+# because gitleaks only offers the high-entropy substring it isolated.
+regexTarget = "line"
 paths = [
   '''\.venv/''',
   '''node_modules/''',
@@ -12,5 +16,5 @@ paths = [
 ]
 regexes = [
   '''change-me-locally''',
-  '''generate-a-random-value-locally''',
+  '''generate-a-random-value-locally.*''',
 ]

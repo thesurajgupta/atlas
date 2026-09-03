@@ -77,6 +77,9 @@ make demo                 # the full story, end to end, offline, reproducible
 This is a 6-person team project and **everyone can contribute anywhere** — backend, ML, frontend,
 security, DevOps, UI/UX, docs. You are not locked to a module.
 
+**New to the project? Start at [issue #15](https://github.com/thesurajgupta/atlas/issues/15)** — it has
+setup, what to read first, and a first task for whatever you're into.
+
 ```bash
 git clone https://github.com/thesurajgupta/atlas.git && cd atlas
 cp .env.example .env

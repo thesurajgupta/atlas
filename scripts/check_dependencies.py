@@ -16,8 +16,19 @@ import tomllib
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
-# Import name differs from the distribution name for these.
-ALIASES = {"jwt": "pyjwt", "yaml": "pyyaml", "dateutil": "python-dateutil", "dotenv": "python-dotenv"}
+# Import name differs from the distribution name for these. Keep this table
+# accurate: an unmapped alias produces a false positive, and a checker that
+# cries wolf gets switched off — which is worse than not having one.
+ALIASES = {
+    "jwt": "pyjwt",
+    "yaml": "pyyaml",
+    "dateutil": "python-dateutil",
+    "dotenv": "python-dotenv",
+    "argon2": "argon2-cffi",
+    "sklearn": "scikit-learn",
+    "cv2": "opencv-python",
+    "PIL": "pillow",
+}
 LOCAL_PACKAGES = {"atlas", "simulator", "ml", "tests"}
 
 

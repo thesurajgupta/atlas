@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-pytestmark = [pytest.mark.leakage, pytest.mark.asyncio]
+pytestmark = pytest.mark.leakage
 
 SERVING_ROLES = ("atlas_app", "atlas_features")
 

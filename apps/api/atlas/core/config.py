@@ -27,6 +27,9 @@ def _repo_root() -> Path:
 
 ENV_FILE = _repo_root() / ".env"
 
+#: Minimum HMAC key length for HS256 (RFC 7518 §3.2). Enforced outside development.
+MIN_JWT_SECRET_BYTES = 32
+
 
 class Environment(StrEnum):
     DEVELOPMENT = "development"
@@ -61,13 +64,14 @@ class Settings(BaseSettings):
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 86400
     mfa_required: bool = True
-    jwt_secret: str = "generate-a-random-value-locally"  # noqa: S105
+    jwt_secret: str = "generate-a-random-value-locally-min-32-bytes"  # noqa: S105
 
     h3_resolution: int = Field(default=7, ge=0, le=15)
     candidate_set_cap: int = Field(default=500, gt=0)
 
     query_budget_per_analyst_per_day: int = Field(default=500, gt=0)
     rate_limit_per_minute: int = Field(default=120, gt=0)
+    break_glass_ttl_seconds: int = Field(default=3600, gt=0)
 
     notification_provider: str = "mock"
     allow_external_notifications: bool = False
@@ -81,9 +85,22 @@ class Settings(BaseSettings):
         """
         if self.env is Environment.DEVELOPMENT:
             return
-        placeholders = {"generate-a-random-value-locally", "change-me-locally", ""}
+        placeholders = {
+            "generate-a-random-value-locally",
+            "generate-a-random-value-locally-min-32-bytes",
+            "change-me-locally",
+            "",
+        }
         if self.jwt_secret in placeholders:
             raise ValueError(f"jwt_secret is a placeholder; refusing to start in {self.env}")
+        # RFC 7518 §3.2: an HMAC key for HS256 must be at least as long as the
+        # hash output. A short *real* secret would pass the placeholder check
+        # above while still being weak, so length is enforced separately.
+        if len(self.jwt_secret.encode()) < MIN_JWT_SECRET_BYTES:
+            raise ValueError(
+                f"jwt_secret must be at least {MIN_JWT_SECRET_BYTES} bytes "
+                f"(RFC 7518 §3.2); got {len(self.jwt_secret.encode())}"
+            )
         if self.db_password in placeholders:
             raise ValueError(f"db_password is a placeholder; refusing to start in {self.env}")
         if self.allow_external_notifications and self.notification_provider == "mock":

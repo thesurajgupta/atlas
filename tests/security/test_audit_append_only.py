@@ -15,7 +15,7 @@ from atlas.audit.models import GENESIS_HASH, AuditEvent
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-pytestmark = [pytest.mark.security, pytest.mark.asyncio]
+pytestmark = pytest.mark.security
 
 
 # Fixed so the helper is deterministic. Using uuid4() here made the determinism

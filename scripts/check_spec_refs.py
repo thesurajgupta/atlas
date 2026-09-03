@@ -14,6 +14,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SPEC = REPO / "docs" / "ATLAS_MASTER_SPEC.md"
 
+# A § that follows an external standard reference on the same line cites that
+# document, not the ATLAS spec. Without this, "RFC 7518 §3.2" is reported as a
+# dangling reference — and a checker with false positives gets switched off.
+EXTERNAL_CITATION = re.compile(
+    r"\b(RFC|PEP|ISO|IETF|NIST|OWASP|BNSS|CrPC|IPC|DPDP)\b[^\n]*$", re.IGNORECASE
+)
+
 
 def main() -> int:
     if not SPEC.exists():
@@ -90,6 +97,9 @@ def main() -> int:
             n = int(m.group(1))
             if n > 100:          # legal citations such as §314(a)
                 continue
+            line_start = body.rfind("\n", 0, m.start()) + 1
+            if EXTERNAL_CITATION.search(body[line_start : m.start()]):
+                continue         # "RFC 7518 §3.2", "PEP 503 §2" and the like
             line = body[: m.start()].count("\n") + 1
             if n not in sections:
                 failures.append(f"    {rel}:{line}: {m.group(0)} -> no such section")

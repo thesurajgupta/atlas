@@ -52,6 +52,7 @@ verify-docs: ## Check spec cross-references, traceability and declared dependenc
 	@$(PY) scripts/check_spec_refs.py
 	@$(PY) scripts/check_traceability.py
 	@$(PY) scripts/check_dependencies.py
+	@$(PY) scripts/check_ai_context.py
 
 verify-compose: ## Validate the docker-compose definition
 	@docker compose config --quiet && echo "  ✓ docker-compose valid"
@@ -89,8 +90,7 @@ test-leakage: ## The three ground-truth leakage gates (spec §18) — MUST fail 
 	 else echo "  ⏭  leakage gates: not implemented yet (phase 5)"; fi
 
 verify-audit-chain: ## Recompute the audit hash chain and verify checkpoint signatures (ADR-007)
-	@if [ -f scripts/verify_audit_chain.py ]; then $(PY) scripts/verify_audit_chain.py; \
-	 else echo "  ⏭  audit chain: not implemented yet (phase 1)"; fi
+	@$(PY) scripts/verify_audit_chain.py
 
 # ---------------------------------------------------------------- data & ML
 .PHONY: simulate eval demo load-test

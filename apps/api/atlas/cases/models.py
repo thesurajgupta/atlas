@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     DateTime,
@@ -60,7 +61,7 @@ class Case(UUIDPrimaryKey, Timestamps, Base):
     assigned_to_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     owning_jurisdiction_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
 
-    amount_at_risk: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    amount_at_risk: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
 
     # Set when the case came from a grouping proposal (§27.1). Kept so a grouping
     # can be split back into its constituent cases without losing history.
@@ -126,4 +127,4 @@ class Intervention(UUIDPrimaryKey, Timestamps, Base):
     outcome_recorded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    amount_recovered: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    amount_recovered: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)

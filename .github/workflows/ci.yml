@@ -48,6 +48,7 @@ jobs:
       - run: python scripts/check_spec_refs.py
       - run: python scripts/check_traceability.py
       - run: python scripts/check_dependencies.py
+      - run: python scripts/check_ai_context.py
 
   # ---------------------------------------------------------------------
   # Gate 3: infrastructure definitions are valid.
@@ -185,6 +186,10 @@ jobs:
       ATLAS_DB_USER: atlas
       ATLAS_DB_PASSWORD: change-me-locally
       ATLAS_REDIS_URL: redis://localhost:6379/0
+      # A skipped database test in CI is a broken pipeline, not a convenience.
+      # Without this, the leakage and audit gates could silently vanish from a
+      # green build.
+      ATLAS_REQUIRE_DB: "1"
 
   # ---------------------------------------------------------------------
   # Gate 6: supply chain. Trivy always runs; CodeQL needs source.

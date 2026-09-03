@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-pytestmark = pytest.mark.asyncio
 
 EXPECTED_TABLES = {
     ("iam", "jurisdiction"),
