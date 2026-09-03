@@ -1,0 +1,11 @@
+{
+  "name": "atlas-deck",
+  "private": true,
+  "description": "Generator for the ATLAS team/SIH decks. Owned by Raj.",
+  "scripts": {
+    "build": "node build_deck.js"
+  },
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}
