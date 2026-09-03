@@ -52,6 +52,7 @@ verify-docs: ## Check spec cross-references, traceability and declared dependenc
 	@$(PY) scripts/check_spec_refs.py
 	@$(PY) scripts/check_traceability.py
 	@$(PY) scripts/check_dependencies.py
+	@$(PY) scripts/check_ai_context.py
 
 verify-compose: ## Validate the docker-compose definition
 	@docker compose config --quiet && echo "  ✓ docker-compose valid"
