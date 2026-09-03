@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 
+from atlas.complaints.router import router as complaints_router
 from atlas.core.config import Environment, get_settings
 from atlas.core.database import dispose_engine
 from atlas.core.errors import AtlasError
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, unhandled_error_handler)
 
     app.include_router(iam_router)
+    app.include_router(complaints_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

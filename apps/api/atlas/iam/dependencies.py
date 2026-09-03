@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -10,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas.core import context
 from atlas.core.database import get_session
-from atlas.core.errors import AuthenticationError
-from atlas.iam import service, tokens
+from atlas.core.errors import AuthenticationError, AuthorizationError, JurisdictionError
+from atlas.iam import authz, breakglass, service, tokens
 from atlas.iam.models import Investigator
 
 # auto_error=False so a missing header raises our own AuthenticationError with a
@@ -63,3 +65,58 @@ async def get_current_investigator(
 
 
 CurrentInvestigator = Annotated[Investigator, Depends(get_current_investigator)]
+
+
+def require(permission: authz.Permission) -> Callable[[Investigator], Awaitable[Investigator]]:
+    """Dependency factory enforcing a role permission (RBAC).
+
+    This is only half the check. Holding `complaint:read` does not mean you may
+    read *this* complaint — the jurisdiction test (ABAC) is applied per resource
+    by `authorize_resource`, because the answer depends on the row.
+    """
+
+    async def _check(investigator: CurrentInvestigator) -> Investigator:
+        if not authz.has_permission(investigator.role, permission):
+            raise AuthorizationError(
+                f"role {investigator.role.value} lacks {permission.value}",
+                role=investigator.role.value,
+                permission=permission.value,
+            )
+        return investigator
+
+    return _check
+
+
+async def authorize_resource(
+    session: AsyncSession,
+    investigator: Investigator,
+    *,
+    resource_jurisdiction_id: uuid.UUID | None,
+) -> None:
+    """Jurisdiction check for one resource (ABAC).
+
+    Raises :class:`JurisdictionError`, which returns **404, not 403**. A 403
+    confirms the resource exists, so an investigator could map cases outside
+    their jurisdiction by probing ids. The distinction is recorded in the audit
+    log, where it belongs.
+
+    A live break-glass grant widens scope to national — and the fact that it was
+    used is written into the audit event, not merely the grant.
+    """
+    if await authz.can_access_jurisdiction(
+        session,
+        role=investigator.role,
+        actor_jurisdiction_id=investigator.jurisdiction_id,
+        resource_jurisdiction_id=resource_jurisdiction_id,
+    ):
+        return
+
+    if await breakglass.active_grant(session, investigator.id) is not None:
+        context.set_break_glass_used(True)
+        return
+
+    raise JurisdictionError(
+        "resource outside caller jurisdiction",
+        actor_jurisdiction=str(investigator.jurisdiction_id),
+        resource_jurisdiction=str(resource_jurisdiction_id),
+    )

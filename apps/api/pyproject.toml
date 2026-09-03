@@ -95,7 +95,9 @@ ignore = ["S101"]  # assert is fine in tests
 "simulator/**" = ["S311"]   # non-crypto RNG is correct for a simulator
 # Alembic writes these files. Reformatting generated output by hand is churn and
 # produces diffs that obscure the actual schema change under review.
-"alembic/versions/*.py" = ["E501", "I001", "W291", "W293"]
+# F401 too: the migration template always imports geoalchemy2, and whether a
+# given migration uses it depends on whether it touches a geometry column.
+"alembic/versions/*.py" = ["E501", "I001", "W291", "W293", "F401"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]

@@ -64,7 +64,10 @@ class AuditEvent(UUIDPrimaryKey, Base):
 
     actor_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     actor_role: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    actor_jurisdiction: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 64, not 32: this holds a jurisdiction UUID (36 chars). Sized at 32 it
+    # accepted every unit test — which passed a short code — and failed the
+    # moment a real request went through with an id.
+    actor_jurisdiction: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     action: Mapped[str] = mapped_column(String(96), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False)

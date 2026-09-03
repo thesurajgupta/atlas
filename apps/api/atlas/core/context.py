@@ -42,8 +42,25 @@ def get_correlation_id() -> str:
     return _correlation_id.get() or new_correlation_id()
 
 
+_break_glass_used: ContextVar[bool] = ContextVar("break_glass_used", default=False)
+
+
 def set_actor(actor: RequestActor | None) -> None:
     _actor.set(actor)
+    _break_glass_used.set(False)
+
+
+def set_break_glass_used(used: bool) -> None:
+    """Mark that this request relied on a break-glass grant.
+
+    Recorded on the audit event rather than only on the grant. A grant audited
+    once and then used invisibly for an hour tells a reviewer almost nothing.
+    """
+    _break_glass_used.set(used)
+
+
+def break_glass_used() -> bool:
+    return _break_glass_used.get()
 
 
 def get_actor() -> RequestActor | None:
