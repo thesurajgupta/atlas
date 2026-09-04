@@ -1,137 +1,315 @@
-"""Unit tests for ml.evaluation.metrics — Issue #18."""
+"""Unit tests for ml.evaluation.metrics — Issue #18.
 
+Every metric test includes the hand-worked arithmetic in a comment,
+per the issue's own bar: "a metric implementation nobody has verified
+by hand is not trustworthy."
+"""
+
+import json
 import math
+from datetime import datetime, timezone
+
+import pytest
 
 from ml.evaluation.metrics import (
-    _f1,
-    _mrr,
-    _pct_uplift,
-    _precision,
-    _precision_at_k,
-    baseline_mule_risk,
-    evaluate_tier1,
-    evaluate_tier2,
-    evaluate_tier3,
+    LeadTimeReport,
+    compare_pai,
+    compute_lead_time,
+    expected_calibration_error,
     generate_report,
+    hit_within_radius,
+    prediction_accuracy_index,
+    predictive_efficiency_index,
+    recall_at_k,
+    write_report,
 )
 
 
-# ---------------------------------------------------------------------
-# Metric primitives
-# ---------------------------------------------------------------------
-def test_pct_uplift_positive():
-    assert math.isclose(_pct_uplift(model_value=0.8, baseline_value=0.5), 60.0)
+# =======================================================================
+# PAI - Prediction Accuracy Index
+# =======================================================================
+def test_pai_matches_reviewers_hand_worked_example():
+    # 100 cash-outs, 5% of area flagged, 40 caught -> PAI = 8.0
+    result = prediction_accuracy_index(
+        hits=40,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
+    assert math.isclose(result.value, 8.0)
 
 
-def test_pct_uplift_negative_when_model_worse():
-    assert math.isclose(_pct_uplift(model_value=0.3, baseline_value=0.5), -40.0)
+def test_pai_of_random_flagging_is_one():
+    # flag 50% of area, catch 50% of hits -> exactly as good as random -> PAI = 1.0
+    result = prediction_accuracy_index(
+        hits=50,
+        total_hits=100,
+        flagged_area=50.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
+    assert math.isclose(result.value, 1.0)
 
 
-def test_pct_uplift_nan_when_baseline_zero():
-    assert math.isnan(_pct_uplift(model_value=0.5, baseline_value=0.0))
+def test_pai_rejects_zero_total_hits():
+    with pytest.raises(ValueError):
+        prediction_accuracy_index(
+            hits=0,
+            total_hits=0,
+            flagged_area=5.0,
+            total_area=100.0,
+            h3_resolution=8,
+        )
 
 
-def test_precision_at_k_counts_hits_in_top_k():
-    scores = {"a": 0.9, "b": 0.8, "c": 0.1}
-    labels = {"a": True, "b": False, "c": False}
-    # top 2 by score: a, b -> 1 hit / k=2
-    assert _precision_at_k(scores, labels, k=2) == 0.5
+def test_pai_rejects_zero_flagged_area():
+    with pytest.raises(ValueError):
+        prediction_accuracy_index(
+            hits=10,
+            total_hits=100,
+            flagged_area=0.0,
+            total_area=100.0,
+            h3_resolution=8,
+        )
 
 
-def test_precision_handles_no_predicted_positives():
-    flags = {"a": False, "b": False}
-    labels = {"a": True, "b": False}
-    assert _precision(flags, labels) == 0.0
+def test_pai_refuses_to_compare_across_resolutions():
+    a = prediction_accuracy_index(
+        hits=40,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
+    b = prediction_accuracy_index(
+        hits=40,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=9,
+    )
+    with pytest.raises(ValueError, match="resolution"):
+        compare_pai(a, b)
 
 
-def test_f1_perfect_prediction():
-    flags = {"a": True, "b": False}
-    labels = {"a": True, "b": False}
-    assert _f1(flags, labels) == 1.0
+def test_pai_comparison_works_at_same_resolution():
+    a = prediction_accuracy_index(
+        hits=40,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
+    b = prediction_accuracy_index(
+        hits=20,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
+    assert math.isclose(compare_pai(a, b), 4.0)  # 8.0 - 4.0
 
 
-def test_mrr_rewards_earlier_rank():
-    rankings = {"CMP1": ["wrong", "right", "also_wrong"]}
-    true_endpoint = {"CMP1": "right"}
-    # target at rank 2 -> reciprocal rank 0.5
-    assert _mrr(rankings, true_endpoint) == 0.5
+# =======================================================================
+# Recall@K
+# =======================================================================
+def test_recall_at_k_hand_worked_example():
+    # CMP1 target "B" in top 2 of ["A","B","C"] -> hit
+    # CMP2 target "D" not in ["A","B","C"] -> miss
+    # recall@2 = 1/2 = 0.5
+    rankings = {"CMP1": ["A", "B", "C"], "CMP2": ["A", "B", "C"]}
+    true_endpoint = {"CMP1": "B", "CMP2": "D"}
+    assert recall_at_k(rankings, true_endpoint, k=2) == 0.5
 
 
-def test_mrr_zero_when_target_missing_from_ranking():
-    rankings = {"CMP1": ["a", "b"]}
-    true_endpoint = {"CMP1": "not_in_list"}
-    assert _mrr(rankings, true_endpoint) == 0.0
+def test_recall_at_k_perfect_score():
+    rankings = {"CMP1": ["X"], "CMP2": ["Y"]}
+    true_endpoint = {"CMP1": "X", "CMP2": "Y"}
+    assert recall_at_k(rankings, true_endpoint, k=1) == 1.0
 
 
-# ---------------------------------------------------------------------
-# Baselines
-# ---------------------------------------------------------------------
-def test_baseline_mule_risk_flags_new_accounts():
-    assert baseline_mule_risk(account_age_days=3) is True
-    assert baseline_mule_risk(account_age_days=90) is False
+def test_recall_at_k_rejects_k_below_one():
+    with pytest.raises(ValueError):
+        recall_at_k({}, {}, k=0)
 
 
-# ---------------------------------------------------------------------
-# Tier-level evaluation + report shape
-# ---------------------------------------------------------------------
-def test_evaluate_tier1_exposes_uplift_properties():
-    model_scores = {"h3_a": 0.9, "h3_b": 0.1}
-    baseline_scores = {"h3_a": 0.5, "h3_b": 0.5}
-    labels = {"h3_a": True, "h3_b": False}
-
-    result = evaluate_tier1(model_scores, baseline_scores, labels)
-
-    assert hasattr(result, "uplift_auc_pct")
-    assert hasattr(result, "uplift_precision_at_10_pct")
+def test_recall_at_k_does_not_cap_below_full_score_with_few_candidates():
+    # Guards the precision_at_k bug the review found (dividing by k
+    # instead of available candidates) - recall_at_k is a hit-rate over
+    # cases, not over candidates, so it never had that bug, but a
+    # perfect model must still score 1.0 regardless of k.
+    rankings = {"CMP1": ["only_candidate"]}
+    true_endpoint = {"CMP1": "only_candidate"}
+    assert recall_at_k(rankings, true_endpoint, k=10) == 1.0
 
 
-def test_evaluate_tier2_mrr_uplift_direction():
-    model_rankings = {"CMP1": ["right", "wrong"]}
-    baseline_rankings = {"CMP1": ["wrong", "right"]}
-    true_endpoint = {"CMP1": "right"}
-
-    result = evaluate_tier2(model_rankings, baseline_rankings, true_endpoint)
-
-    # model ranks the true endpoint first (MRR=1.0), baseline ranks it
-    # second (MRR=0.5) -> uplift should be positive
-    assert result.uplift_mrr_pct > 0
-
-
-def test_evaluate_tier3_returns_f1_and_precision():
-    model_flags = {"acc1": True, "acc2": False}
-    baseline_flags = {"acc1": False, "acc2": False}
-    labels = {"acc1": True, "acc2": False}
-
-    result = evaluate_tier3(model_flags, baseline_flags, labels)
-
-    assert result.model_f1 == 1.0
-    assert result.baseline_f1 == 0.0
+# =======================================================================
+# ECE - Expected Calibration Error
+# =======================================================================
+def test_ece_hand_worked_example():
+    # Bin [0.0,0.5): preds [0.2,0.3] labels [F,F] -> avg=0.25, rate=0.0, diff=0.25
+    # Bin [0.5,1.0]: preds [0.8,0.9] labels [T,T] -> avg=0.85, rate=1.0, diff=0.15
+    # ECE = (2/4)*0.25 + (2/4)*0.15 = 0.125 + 0.075 = 0.20
+    ece = expected_calibration_error(
+        predicted_probs=[0.2, 0.3, 0.8, 0.9],
+        true_labels=[False, False, True, True],
+        n_bins=2,
+    )
+    assert math.isclose(ece, 0.20, abs_tol=1e-9)
 
 
-def test_report_never_surfaces_raw_accuracy_as_headline():
-    """Guards the honesty commitment: report only exposes uplift-style
-    fields as headline-shaped keys, plus the raw values for transparency
-    — but the `note` field must always be present to make that explicit.
+def test_ece_is_zero_for_perfectly_calibrated_extreme_predictions():
+    ece = expected_calibration_error(
+        predicted_probs=[0.0, 0.0, 1.0, 1.0],
+        true_labels=[False, False, True, True],
+        n_bins=2,
+    )
+    assert math.isclose(ece, 0.0, abs_tol=1e-9)
+
+
+def test_ece_rejects_mismatched_lengths():
+    with pytest.raises(ValueError):
+        expected_calibration_error(predicted_probs=[0.5], true_labels=[], n_bins=2)
+
+
+def test_ece_rejects_empty_input():
+    with pytest.raises(ValueError):
+        expected_calibration_error(predicted_probs=[], true_labels=[], n_bins=2)
+
+
+# =======================================================================
+# Lead time
+# =======================================================================
+def test_lead_time_hand_worked_example():
+    # CMP1: predicted 10:00, cashed out 10:30 -> +30 min, on-time
+    # CMP2: predicted 10:00, cashed out 09:45 -> -15 min -> LATE
+    # CMP3: predicted 10:00, cashed out 10:00 ->   0 min -> LATE (boundary)
+    predicted_at = {
+        "CMP1": datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+        "CMP2": datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+        "CMP3": datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+    }
+    actual_cashout_at = {
+        "CMP1": datetime(2026, 1, 1, 10, 30, tzinfo=timezone.utc),
+        "CMP2": datetime(2026, 1, 1, 9, 45, tzinfo=timezone.utc),
+        "CMP3": datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+    }
+    report = compute_lead_time(predicted_at, actual_cashout_at)
+
+    assert report.on_time_minutes == [30.0]
+    assert report.late_count == 2
+    assert report.total_count == 3
+    assert math.isclose(report.late_fraction, 2 / 3)
+
+
+def test_lead_time_late_predictions_never_enter_the_timing_distribution():
+    """This is the exact failure mode the review flagged: a late-but-
+    correct prediction must not be averaged in as if it were a success.
     """
-    model_scores = {"h3_a": 0.9}
-    baseline_scores = {"h3_a": 0.5}
-    labels = {"h3_a": True}
-    tier1 = evaluate_tier1(model_scores, baseline_scores, labels)
+    predicted_at = {"CMP1": datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)}
+    actual_cashout_at = {
+        "CMP1": datetime(2026, 1, 1, 9, 0, tzinfo=timezone.utc)
+    }  # already happened
+    report = compute_lead_time(predicted_at, actual_cashout_at)
 
-    model_rankings = {"CMP1": ["right"]}
-    baseline_rankings = {"CMP1": ["right"]}
-    true_endpoint = {"CMP1": "right"}
-    tier2 = evaluate_tier2(model_rankings, baseline_rankings, true_endpoint)
+    assert report.on_time_minutes == []
+    assert report.late_count == 1
+    assert report.late_fraction == 1.0
 
-    model_flags = {"acc1": True}
-    baseline_flags = {"acc1": False}
-    tier3_labels = {"acc1": True}
-    tier3 = evaluate_tier3(model_flags, baseline_flags, tier3_labels)
 
-    report = generate_report(tier1, tier2, tier3, simulation_seed=26184)
+def test_lead_time_percentile_on_empty_on_time_list_is_explicit_zero():
+    report = LeadTimeReport(on_time_minutes=[], late_count=5, total_count=5)
+    assert report.percentile(50) == 0.0
+    assert (
+        report.late_fraction == 1.0
+    )  # caller must check this, not trust percentile alone
 
-    assert "note" in report
-    assert "uplift" in report["note"].lower()
-    assert "git_sha" in report
-    assert "simulation_seed" in report
-    assert report["simulation_seed"] == 26184
+
+# =======================================================================
+# Deliberately-not-implemented metrics fail loudly, not silently
+# =======================================================================
+def test_pei_raises_not_implemented():
+    with pytest.raises(NotImplementedError):
+        predictive_efficiency_index()
+
+
+def test_hit_within_radius_raises_not_implemented():
+    with pytest.raises(NotImplementedError):
+        hit_within_radius()
+
+
+# =======================================================================
+# Report generation - JSON validity and honesty guarantees
+# =======================================================================
+def test_report_is_valid_json_including_edge_cases():
+    pai = prediction_accuracy_index(
+        hits=40,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
+    recall_results = {1: 0.0, 3: 0.5, 5: 0.5, 10: 0.5}
+    ece = 0.2
+    lead_time = compute_lead_time(
+        predicted_at={"CMP1": datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)},
+        actual_cashout_at={"CMP1": datetime(2026, 1, 1, 10, 30, tzinfo=timezone.utc)},
+    )
+
+    report = generate_report(pai, recall_results, ece, lead_time)
+
+    # This is the exact bug the review caught: json.dumps must not be
+    # allowed to silently write a NaN. If nothing in the report can
+    # produce a NaN, this call succeeds; if something did, it fails
+    # loudly here instead of shipping broken JSON.
+    serialised = json.dumps(report, allow_nan=False)
+    parsed = json.loads(serialised)
+    assert parsed["pai"]["value"] == 8.0
+
+
+def test_report_never_contains_pei_or_hit_within_radius_placeholders():
+    """Guards against silently reintroducing a stub value for a metric
+    that has not actually been implemented.
+    """
+    pai = prediction_accuracy_index(
+        hits=40,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
+    recall_results = {1: 1.0}
+    ece = 0.0
+    lead_time = compute_lead_time(predicted_at={}, actual_cashout_at={})
+
+    report = generate_report(pai, recall_results, ece, lead_time)
+
+    assert "pei" not in report
+    assert "hit_within_radius" not in report
+    assert "not yet implemented" in report["note"].lower()
+
+
+def test_write_report_produces_a_file_parseable_by_a_strict_json_reader():
+    pai = prediction_accuracy_index(
+        hits=40,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
+    recall_results = {1: 1.0}
+    ece = 0.0
+    lead_time = compute_lead_time(predicted_at={}, actual_cashout_at={})
+    report = generate_report(pai, recall_results, ece, lead_time)
+
+    path = write_report(report)
+    try:
+        with open(path) as f:
+            # json.load with default settings rejects NaN/Infinity by
+            # ourselves having written with allow_nan=False; a strict
+            # reader (jq, JSON.parse) would reject a NaN token outright.
+            reloaded = json.load(f)
+        assert reloaded["pai"]["value"] == 8.0
+    finally:
+        path.unlink(missing_ok=True)

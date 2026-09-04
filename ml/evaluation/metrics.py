@@ -7,13 +7,30 @@ that ends up on a slide traces back to an exact, reproducible run.
 Honesty rules this file exists to enforce:
   - The headline number is always UPLIFT OVER A BASELINE, never raw
     accuracy (raw accuracy is easy to game on an imbalanced problem
-    like this — most zones/accounts are NOT fraud hotspots).
+    like this - most zones/accounts are NOT fraud hotspots).
   - Every tier is scored on its own metric, never blended into one
     "confidence" number.
+  - A metric that is not genuinely implemented must raise
+    NotImplementedError, never return a placeholder value. A
+    hardcoded 0.0 flowing into a SHA-stamped report is worse than no
+    number at all, because it is reproducible and wrong.
   - Nothing in this file may import from the simulator's hidden
-    ground-truth objects directly — it only reads whatever the
-    trained models predicted, plus the held-out labels released
-    for evaluation. (See leakage-gate ADRs.)
+    ground-truth objects directly - it only reads whatever the
+    trained models predicted, plus the held-out labels released for
+    evaluation. (See leakage-gate ADRs.)
+
+Status against Issue #18's six required metrics:
+  PAI (Prediction Accuracy Index)   - IMPLEMENTED, hand-verified
+  Recall@K (K = 1, 3, 5, 10)        - IMPLEMENTED, hand-verified
+  ECE (calibration error)            - IMPLEMENTED, standard definition
+  Lead time (distribution)           - IMPLEMENTED, late predictions
+                                        reported separately, never
+                                        folded into a mean
+  PEI (Predictive Efficiency Index)  - NOT IMPLEMENTED - formula not
+                                        yet confirmed against the issue
+  Hit-within-radius (500m/2km/5km)   - NOT IMPLEMENTED - needs real
+                                        lat/lon + haversine distance,
+                                        which does not exist yet
 """
 
 from __future__ import annotations
@@ -23,190 +40,289 @@ import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 REPORT_DIR = Path("reports/eval")
 
 
-# ---------------------------------------------------------------------
-# Baselines — the "dumb but honest" comparison point for each tier.
-# A model that can't beat these shouldn't ship.
-# ---------------------------------------------------------------------
-def baseline_zone_risk(historical_cashout_density: dict[str, float]) -> dict[str, float]:
-    """Tier 1 baseline: 'risk = however often this zone has seen
-    cash-out historically.' No model, just a lookup table.
+# =======================================================================
+# PAI - Prediction Accuracy Index
+# =======================================================================
+@dataclass
+class PAIResult:
+    """value > 1.0 means you beat random area-proportional flagging.
+    value == 1.0 means you did no better than flagging at random.
     """
-    return historical_cashout_density
-    # TODO: replace input with the actual public feature the model sees,
-    # once ml/features exists.
+
+    value: float
+    h3_resolution: int
+    hits: int
+    total_hits: int
+    flagged_area: float
+    total_area: float
 
 
-def baseline_endpoint_ranking(candidate_endpoints: list[str], last_hop_coords) -> list[str]:
-    """Tier 2 baseline: rank candidate endpoints purely by physical
-    distance from the last known mule hop. No network/behavioral signal
-    at all — this is the bar the LambdaMART ranker has to clear.
+def prediction_accuracy_index(
+    hits: int,
+    total_hits: int,
+    flagged_area: float,
+    total_area: float,
+    h3_resolution: int,
+) -> PAIResult:
     """
-    # TODO: real distance calc once the geo utilities exist.
-    return candidate_endpoints  # stub: unranked passthrough
+    PAI = (hits / total_hits) / (flagged_area / total_area)
+
+    Area-normalised: rewards catching a large share of cash-outs while
+    flagging a small share of the map. A model that just flags 90% of
+    the map and catches 90% of hits gets PAI = 1.0 - no better than
+    chance. A model that flags 5% of the map and catches 40% of hits
+    gets PAI = 8.0 - 8x better than random.
+
+    Hand-verified example (from the review): 100 cash-outs total, 5%
+    of the area flagged, 40 of the 100 caught inside the flagged area
+    -> PAI = (40/100) / (5/100) = 0.40 / 0.05 = 8.0
+    """
+    if total_hits <= 0:
+        raise ValueError(
+            "total_hits must be > 0 - cannot compute PAI with no ground-truth events"
+        )
+    if total_area <= 0:
+        raise ValueError("total_area must be > 0")
+    if flagged_area <= 0:
+        raise ValueError(
+            "flagged_area must be > 0 - PAI is undefined for flagging nothing "
+            "(division by zero); a model that flags nothing should be scored "
+            "separately as a non-participation case, not fed into this formula"
+        )
+    if flagged_area > total_area:
+        raise ValueError("flagged_area cannot exceed total_area")
+
+    hit_rate = hits / total_hits
+    area_fraction = flagged_area / total_area
+    return PAIResult(
+        value=hit_rate / area_fraction,
+        h3_resolution=h3_resolution,
+        hits=hits,
+        total_hits=total_hits,
+        flagged_area=flagged_area,
+        total_area=total_area,
+    )
 
 
+def compare_pai(a: PAIResult, b: PAIResult) -> float:
+    """Difference in PAI, a minus b.
+
+    Refuses to compare across different H3 resolutions: PAI is area-
+    normalised, and area itself changes with resolution, so a PAI of
+    8.0 at resolution 8 is not comparable to a PAI of 8.0 at
+    resolution 9. Comparing them silently would produce a number that
+    looks meaningful and is not - exactly the failure mode this file
+    exists to prevent.
+    """
+    if a.h3_resolution != b.h3_resolution:
+        raise ValueError(
+            f"Cannot compare PAI across different H3 resolutions "
+            f"({a.h3_resolution} vs {b.h3_resolution}) - area "
+            f"normalisation is resolution-dependent. Re-run both at "
+            f"the same resolution before comparing."
+        )
+    return a.value - b.value
+
+
+# =======================================================================
+# Recall@K
+# =======================================================================
+def recall_at_k(
+    rankings: dict[str, list[str]],
+    true_endpoint: dict[str, str],
+    k: int,
+) -> float:
+    """
+    Fraction of cases where the true endpoint appears within the top K
+    ranked candidates.
+
+    rankings: {complaint_id: [endpoint_id, ...]} ordered most-likely first
+    true_endpoint: {complaint_id: endpoint_id} - the endpoint actually
+                   used, from the held-out evaluation release only.
+
+    Hand-verified example: 2 cases.
+      CMP1: true endpoint "B", ranked ["A", "B", "C"], k=2 -> hit (B is in top 2)
+      CMP2: true endpoint "D", ranked ["A", "B", "C"], k=2 -> miss (D absent)
+      recall@2 = 1 hit / 2 total = 0.5
+    """
+    if k < 1:
+        raise ValueError("k must be >= 1")
+
+    hits = 0
+    total = 0
+    for complaint_id, target in true_endpoint.items():
+        total += 1
+        ranked = rankings.get(complaint_id, [])
+        if target in ranked[:k]:
+            hits += 1
+
+    return hits / total if total else 0.0
+
+
+# =======================================================================
+# ECE - Expected Calibration Error (standard definition)
+# =======================================================================
+def expected_calibration_error(
+    predicted_probs: list[float],
+    true_labels: list[bool],
+    n_bins: int = 10,
+) -> float:
+    """
+    Standard ECE: bin predictions by predicted probability, compare the
+    average predicted probability in each bin against the actual
+    positive rate in that bin, weight by bin size, sum.
+
+    ECE = sum_over_bins( |bin_size| / N * |avg_predicted - actual_rate| )
+
+    A well-calibrated model (when it says "70% risk", the zone is
+    actually risky ~70% of the time) has ECE near 0.
+
+    Hand-verified example: 4 predictions, 2 bins.
+      Bin [0.0, 0.5): preds [0.2, 0.3], labels [False, False]
+        avg_predicted = 0.25, actual_rate = 0/2 = 0.0, |diff| = 0.25
+      Bin [0.5, 1.0]: preds [0.8, 0.9], labels [True, True]
+        avg_predicted = 0.85, actual_rate = 2/2 = 1.0, |diff| = 0.15
+      ECE = (2/4)*0.25 + (2/4)*0.15 = 0.125 + 0.075 = 0.20
+    """
+    if len(predicted_probs) != len(true_labels):
+        raise ValueError("predicted_probs and true_labels must be the same length")
+    if not predicted_probs:
+        raise ValueError("cannot compute ECE on empty input")
+    if n_bins < 1:
+        raise ValueError("n_bins must be >= 1")
+
+    n = len(predicted_probs)
+    bin_width = 1.0 / n_bins
+    total_error = 0.0
+
+    for bin_idx in range(n_bins):
+        lo = bin_idx * bin_width
+        hi = (
+            1.0 if bin_idx == n_bins - 1 else lo + bin_width
+        )  # last bin is closed on the right
+
+        bin_indices = [
+            i
+            for i, p in enumerate(predicted_probs)
+            if (p >= lo and p < hi) or (bin_idx == n_bins - 1 and p == hi)
+        ]
+        if not bin_indices:
+            continue
+
+        bin_preds = [predicted_probs[i] for i in bin_indices]
+        bin_labels = [true_labels[i] for i in bin_indices]
+
+        avg_predicted = sum(bin_preds) / len(bin_preds)
+        actual_rate = sum(1 for lbl in bin_labels if lbl) / len(bin_labels)
+        bin_weight = len(bin_indices) / n
+
+        total_error += bin_weight * abs(avg_predicted - actual_rate)
+
+    return total_error
+
+
+# =======================================================================
+# Lead time - the distribution, never a mean; late predictions are
+# reported as failures, never scored as successes regardless of rank
+# =======================================================================
+@dataclass
+class LeadTimeReport:
+    on_time_minutes: list[
+        float
+    ]  # lead time, only for predictions that arrived before cash-out
+    late_count: int  # predictions that arrived at or after cash-out - zero warning
+    total_count: int
+
+    @property
+    def late_fraction(self) -> float:
+        return self.late_count / self.total_count if self.total_count else 0.0
+
+    def percentile(self, p: float) -> float:
+        """p in [0, 100]. Returns 0.0 if there are no on-time predictions
+        at all - callers must check late_fraction before trusting this.
+        """
+        if not self.on_time_minutes:
+            return 0.0
+        ordered = sorted(self.on_time_minutes)
+        idx = min(len(ordered) - 1, max(0, round((p / 100) * (len(ordered) - 1))))
+        return ordered[idx]
+
+
+def compute_lead_time(
+    predicted_at: dict[str, datetime],
+    actual_cashout_at: dict[str, datetime],
+) -> LeadTimeReport:
+    """
+    Lead time = actual_cashout_at - predicted_at, in minutes.
+
+    A prediction that arrives AT OR AFTER the cash-out already happened
+    provides zero real warning, no matter how accurate it was - it is
+    counted in late_count, never averaged into the timing distribution.
+    This is the rule the review called out explicitly: a late-but-
+    correct prediction must not score as a success.
+
+    Hand-verified example: 3 cases.
+      CMP1: predicted 10:00, cashed out 10:30 -> 30 min lead, on-time
+      CMP2: predicted 10:00, cashed out 09:45 -> -15 min -> LATE
+      CMP3: predicted 10:00, cashed out 10:00 -> 0 min -> LATE (not "on time")
+      -> on_time_minutes = [30.0], late_count = 2, total_count = 3
+    """
+    on_time: list[float] = []
+    late = 0
+    total = 0
+
+    for complaint_id, actual in actual_cashout_at.items():
+        predicted = predicted_at.get(complaint_id)
+        if predicted is None:
+            continue
+        total += 1
+        delta_minutes = (actual - predicted).total_seconds() / 60.0
+        if delta_minutes <= 0:
+            late += 1
+        else:
+            on_time.append(delta_minutes)
+
+    return LeadTimeReport(on_time_minutes=on_time, late_count=late, total_count=total)
+
+
+# =======================================================================
+# NOT YET IMPLEMENTED - raise loudly rather than return a stub value.
+# See module docstring for why each is blocked.
+# =======================================================================
+def predictive_efficiency_index(*args: Any, **kwargs: Any) -> float:
+    raise NotImplementedError(
+        "PEI (Predictive Efficiency Index) formula has not been confirmed "
+        "against Issue #18's actual spec text yet. Do not guess at this - "
+        "paste the issue's definition before implementing."
+    )
+
+
+def hit_within_radius(*args: Any, **kwargs: Any) -> float:
+    raise NotImplementedError(
+        "Hit-within-radius (500m/2km/5km) needs real lat/lon coordinates "
+        "and a haversine-distance utility, neither of which exist yet "
+        "(atlas.geo is not implemented). Implementing this now would "
+        "mean faking the geo layer just to satisfy this function."
+    )
+
+
+# =======================================================================
+# Baselines - unchanged from before, still useful as comparison points
+# for whichever metrics end up wrapping them.
+# =======================================================================
 def baseline_mule_risk(account_age_days: float, threshold_days: float = 14) -> bool:
-    """Tier 3 baseline: 'flag it if the account is very new.'
-    One rule, one threshold — the simplest thing that isn't random.
-    """
+    """'Flag it if the account is very new.' The bar a real model has to beat."""
     return account_age_days < threshold_days
 
 
-# ---------------------------------------------------------------------
-# Tier 1 — Zone risk: binary classification per H3 cell / window
-# ---------------------------------------------------------------------
-@dataclass
-class Tier1Result:
-    model_auc: float
-    baseline_auc: float
-    model_precision_at_10: float
-    baseline_precision_at_10: float
-
-    @property
-    def uplift_auc_pct(self) -> float:
-        return _pct_uplift(self.model_auc, self.baseline_auc)
-
-    @property
-    def uplift_precision_at_10_pct(self) -> float:
-        return _pct_uplift(self.model_precision_at_10, self.baseline_precision_at_10)
-
-
-def evaluate_tier1(model_scores: dict[str, float], baseline_scores: dict[str, float],
-                    true_labels: dict[str, bool]) -> Tier1Result:
-    """
-    model_scores / baseline_scores: {h3_cell: risk_score}
-    true_labels: {h3_cell: did_cashout_actually_happen_here} — from the
-                 HELD-OUT evaluation release, never seen during training.
-    """
-    return Tier1Result(
-        model_auc=_auc(model_scores, true_labels),
-        baseline_auc=_auc(baseline_scores, true_labels),
-        model_precision_at_10=_precision_at_k(model_scores, true_labels, k=10),
-        baseline_precision_at_10=_precision_at_k(baseline_scores, true_labels, k=10),
-    )
-    # TODO: swap in sklearn.metrics.roc_auc_score for _auc once wired
-    # to real arrays instead of dicts.
-
-
-# ---------------------------------------------------------------------
-# Tier 2 — Case-conditioned ranking: learning-to-rank metrics
-# ---------------------------------------------------------------------
-@dataclass
-class Tier2Result:
-    model_ndcg_at_5: float
-    baseline_ndcg_at_5: float
-    model_mrr: float
-    baseline_mrr: float
-
-    @property
-    def uplift_ndcg_pct(self) -> float:
-        return _pct_uplift(self.model_ndcg_at_5, self.baseline_ndcg_at_5)
-
-    @property
-    def uplift_mrr_pct(self) -> float:
-        return _pct_uplift(self.model_mrr, self.baseline_mrr)
-
-
-def evaluate_tier2(model_rankings: dict[str, list[str]],
-                    baseline_rankings: dict[str, list[str]],
-                    true_endpoint: dict[str, str]) -> Tier2Result:
-    """
-    *_rankings: {complaint_id: [endpoint_id, ...]} ordered most-likely first
-    true_endpoint: {complaint_id: endpoint_id} the endpoint actually used —
-                   again, only from the held-out evaluation release.
-    """
-    return Tier2Result(
-        model_ndcg_at_5=_ndcg_at_k(model_rankings, true_endpoint, k=5),
-        baseline_ndcg_at_5=_ndcg_at_k(baseline_rankings, true_endpoint, k=5),
-        model_mrr=_mrr(model_rankings, true_endpoint),
-        baseline_mrr=_mrr(baseline_rankings, true_endpoint),
-    )
-
-
-# ---------------------------------------------------------------------
-# Tier 3 — Mule & endpoint risk: binary classification
-# ---------------------------------------------------------------------
-@dataclass
-class Tier3Result:
-    model_f1: float
-    baseline_f1: float
-    model_precision: float
-    baseline_precision: float
-
-    @property
-    def uplift_f1_pct(self) -> float:
-        return _pct_uplift(self.model_f1, self.baseline_f1)
-
-
-def evaluate_tier3(model_flags: dict[str, bool], baseline_flags: dict[str, bool],
-                    true_labels: dict[str, bool]) -> Tier3Result:
-    return Tier3Result(
-        model_f1=_f1(model_flags, true_labels),
-        baseline_f1=_f1(baseline_flags, true_labels),
-        model_precision=_precision(model_flags, true_labels),
-        baseline_precision=_precision(baseline_flags, true_labels),
-    )
-
-
-# ---------------------------------------------------------------------
-# Metric primitives — deliberately simple, swap for sklearn once real
-# arrays exist. Kept dependency-free so this module is easy to unit test.
-# ---------------------------------------------------------------------
-def _pct_uplift(model_value: float, baseline_value: float) -> float:
-    if baseline_value == 0:
-        return float("nan")
-    return 100.0 * (model_value - baseline_value) / baseline_value
-
-
-def _auc(scores: dict, labels: dict) -> float:
-    # TODO: real ROC-AUC. Stub returns a placeholder so the harness runs.
-    return 0.0
-
-
-def _precision_at_k(scores: dict, labels: dict, k: int) -> float:
-    top_k = sorted(scores, key=scores.get, reverse=True)[:k]
-    hits = sum(1 for cell in top_k if labels.get(cell, False))
-    return hits / k if k else 0.0
-
-
-def _ndcg_at_k(rankings: dict, true_endpoint: dict, k: int) -> float:
-    # TODO: real NDCG computation with graded relevance.
-    return 0.0
-
-
-def _mrr(rankings: dict, true_endpoint: dict) -> float:
-    reciprocal_ranks = []
-    for cid, ranked_list in rankings.items():
-        target = true_endpoint.get(cid)
-        if target in ranked_list:
-            rank = ranked_list.index(target) + 1
-            reciprocal_ranks.append(1.0 / rank)
-        else:
-            reciprocal_ranks.append(0.0)
-    return sum(reciprocal_ranks) / len(reciprocal_ranks) if reciprocal_ranks else 0.0
-
-
-def _f1(flags: dict, labels: dict) -> float:
-    p = _precision(flags, labels)
-    tp = sum(1 for k, v in flags.items() if v and labels.get(k))
-    fn = sum(1 for k, v in labels.items() if v and not flags.get(k))
-    r = tp / (tp + fn) if (tp + fn) else 0.0
-    return 2 * p * r / (p + r) if (p + r) else 0.0
-
-
-def _precision(flags: dict, labels: dict) -> float:
-    tp = sum(1 for k, v in flags.items() if v and labels.get(k))
-    fp = sum(1 for k, v in flags.items() if v and not labels.get(k))
-    return tp / (tp + fp) if (tp + fp) else 0.0
-
-
-# ---------------------------------------------------------------------
-# Report generation — the git-SHA-stamped output judges/teammates read
-# ---------------------------------------------------------------------
+# =======================================================================
+# Report generation - the git-SHA-stamped output judges/teammates read
+# =======================================================================
 def _current_git_sha() -> str:
     try:
         return subprocess.check_output(
@@ -216,63 +332,82 @@ def _current_git_sha() -> str:
         return "unknown"
 
 
-def generate_report(tier1: Tier1Result, tier2: Tier2Result, tier3: Tier3Result,
-                     simulation_seed: int) -> dict:
-    report = {
+def generate_report(
+    pai: PAIResult,
+    recall_at_k_results: dict[int, float],
+    ece: float,
+    lead_time: LeadTimeReport,
+) -> dict[str, Any]:
+    """
+    Only includes metrics that were actually computed. PEI and
+    hit-within-radius are deliberately absent, not present-as-null -
+    their functions raise before this is ever called, so there is no
+    silent placeholder to accidentally serialise.
+    """
+    return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "git_sha": _current_git_sha(),
-        "simulation_seed": simulation_seed,
-        "tier1_zone_risk": {
-            **asdict(tier1),
-            "uplift_auc_pct": tier1.uplift_auc_pct,
-            "uplift_precision_at_10_pct": tier1.uplift_precision_at_10_pct,
+        "pai": asdict(pai),
+        "recall_at_k": recall_at_k_results,
+        "ece": ece,
+        "lead_time": {
+            "on_time_minutes": lead_time.on_time_minutes,
+            "late_count": lead_time.late_count,
+            "total_count": lead_time.total_count,
+            "late_fraction": lead_time.late_fraction,
+            "p50_minutes": lead_time.percentile(50),
+            "p90_minutes": lead_time.percentile(90),
         },
-        "tier2_case_ranking": {
-            **asdict(tier2),
-            "uplift_ndcg_pct": tier2.uplift_ndcg_pct,
-            "uplift_mrr_pct": tier2.uplift_mrr_pct,
-        },
-        "tier3_mule_risk": {
-            **asdict(tier3),
-            "uplift_f1_pct": tier3.uplift_f1_pct,
-        },
-        "note": "Headline numbers are uplift-over-baseline. Raw accuracy "
-                "is intentionally not surfaced as a standalone claim.",
+        "note": (
+            "PEI and hit-within-radius are not yet implemented and are "
+            "intentionally omitted from this report rather than filled "
+            "with a placeholder. Lead time excludes late predictions from "
+            "the timing distribution - see late_fraction."
+        ),
     }
-    return report
 
 
-def write_report(report: dict) -> Path:
+def write_report(report: dict[str, Any]) -> Path:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = REPORT_DIR / f"eval_{report['git_sha']}_{int(datetime.now(timezone.utc).timestamp())}.json"
-    out_path.write_text(json.dumps(report, indent=2))
+    out_path = (
+        REPORT_DIR
+        / f"eval_{report['git_sha']}_{int(datetime.now(timezone.utc).timestamp())}.json"
+    )
+    # allow_nan=False: fail loudly at write time if a NaN/Infinity ever
+    # sneaks in, rather than writing invalid JSON that only Python's own
+    # parser tolerates. jq, JSON.parse, and the dashboard all reject NaN.
+    out_path.write_text(json.dumps(report, indent=2, allow_nan=False))
     return out_path
 
 
-# ---------------------------------------------------------------------
-# Entry point — this is what `make eval` calls
-# ---------------------------------------------------------------------
-def main():
+def main() -> None:
     # TODO: replace these stub inputs with real outputs from the
     # prediction layer, scored against the held-out evaluation release
-    # produced by the simulator.
-    stub_labels = {"h3_a": True, "h3_b": False, "h3_c": True}
-    stub_scores_model = {"h3_a": 0.9, "h3_b": 0.2, "h3_c": 0.7}
-    stub_scores_baseline = {"h3_a": 0.5, "h3_b": 0.5, "h3_c": 0.5}
+    # produced by the simulator, once both exist.
+    pai = prediction_accuracy_index(
+        hits=40,
+        total_hits=100,
+        flagged_area=5.0,
+        total_area=100.0,
+        h3_resolution=8,
+    )
 
-    tier1 = evaluate_tier1(stub_scores_model, stub_scores_baseline, stub_labels)
+    rankings = {"CMP1": ["A", "B", "C"], "CMP2": ["A", "B", "C"]}
+    true_endpoint = {"CMP1": "B", "CMP2": "D"}
+    recall_results = {k: recall_at_k(rankings, true_endpoint, k) for k in (1, 3, 5, 10)}
 
-    stub_rankings_model = {"CMP1": ["EPB", "EPA", "EPC"]}
-    stub_rankings_baseline = {"CMP1": ["EPA", "EPB", "EPC"]}
-    stub_true_endpoint = {"CMP1": "EPB"}
-    tier2 = evaluate_tier2(stub_rankings_model, stub_rankings_baseline, stub_true_endpoint)
+    ece = expected_calibration_error(
+        predicted_probs=[0.2, 0.3, 0.8, 0.9],
+        true_labels=[False, False, True, True],
+        n_bins=2,
+    )
 
-    stub_flags_model = {"ACC1": True, "ACC2": False}
-    stub_flags_baseline = {"ACC1": False, "ACC2": False}
-    stub_labels3 = {"ACC1": True, "ACC2": False}
-    tier3 = evaluate_tier3(stub_flags_model, stub_flags_baseline, stub_labels3)
+    lead_time = compute_lead_time(
+        predicted_at={"CMP1": datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)},
+        actual_cashout_at={"CMP1": datetime(2026, 1, 1, 10, 30, tzinfo=timezone.utc)},
+    )
 
-    report = generate_report(tier1, tier2, tier3, simulation_seed=26184)
+    report = generate_report(pai, recall_results, ece, lead_time)
     path = write_report(report)
 
     print(f"Eval report written to {path}")
