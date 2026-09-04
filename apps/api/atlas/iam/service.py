@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,7 +119,12 @@ async def is_revoked(session: AsyncSession, jti: str) -> bool:
 
 
 async def revoke(
-    session: AsyncSession, *, jti: str, investigator_id: uuid.UUID, expires_at, reason: str
+    session: AsyncSession,
+    *,
+    jti: str,
+    investigator_id: uuid.UUID,
+    expires_at: datetime,
+    reason: str,
 ) -> None:
     """Revoke a single token by its jti."""
     session.add(
