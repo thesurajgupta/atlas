@@ -32,7 +32,7 @@ class LimitResult:
 class RateLimiter:
     """Fixed-window counter in Redis."""
 
-    def __init__(self, redis: Redis) -> None:
+    def __init__(self, redis: Redis[str]) -> None:
         self._redis = redis
 
     async def check(self, key: str, *, limit: int, window_seconds: int) -> LimitResult:
@@ -74,10 +74,10 @@ class RateLimiter:
         )
 
 
-_redis: Redis | None = None
+_redis: Redis[str] | None = None
 
 
-def get_redis() -> Redis:
+def get_redis() -> Redis[str]:
     global _redis
     if _redis is None:
         _redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
