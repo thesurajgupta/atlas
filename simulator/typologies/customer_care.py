@@ -16,7 +16,9 @@ PROFILE = TypologyProfile(
     typology=FraudTypology.CUSTOMER_CARE_IMPERSONATION,
     layering_depth=(1, 2),
     inter_hop_delay_minutes=(5.0, 60.0),
-    hop_amount=AmountCurve(mean_log=10.5, sigma_log=0.6, floor=5_000.0, ceiling=500_000.0),
+    hop_amount=AmountCurve(
+        mean_log=10.5, sigma_log=0.6, floor=5_000.0, ceiling=500_000.0
+    ),
     preferred_channels=(
         (CashOutChannel.ATM, 0.55),
         (CashOutChannel.AEPS_BC, 0.45),

@@ -16,7 +16,9 @@ PROFILE = TypologyProfile(
     typology=FraudTypology.INVESTMENT_SCAM,
     layering_depth=(3, 6),
     inter_hop_delay_minutes=(720.0, 5760.0),  # 12 hours – 4 days
-    hop_amount=AmountCurve(mean_log=11.0, sigma_log=0.9, floor=20_000.0, ceiling=3_000_000.0),
+    hop_amount=AmountCurve(
+        mean_log=11.0, sigma_log=0.9, floor=20_000.0, ceiling=3_000_000.0
+    ),
     preferred_channels=(
         (CashOutChannel.BANK_BRANCH, 0.45),
         (CashOutChannel.CRYPTO_P2P, 0.35),

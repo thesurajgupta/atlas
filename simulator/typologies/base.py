@@ -29,11 +29,14 @@ import uuid
 from abc import ABC
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from random import Random
 from typing import Protocol
 
 from atlas.core.enums import CashOutChannel, FraudTypology
+
+_PAISA = Decimal("0.01")
 
 
 class GeographicDispersion(StrEnum):
@@ -53,6 +56,11 @@ class AmountCurve:
     ``floor``/``ceiling`` clip it so a rare tail draw can't produce an absurd amount. These are
     assumptions (``docs/ml/typology-assumptions.md``), not fitted parameters, until calibrated
     against published aggregates.
+
+    ``sample`` emits a :class:`~decimal.Decimal` quantised to paise, not a ``float`` — the
+    ingestion quality gate (#23) rejects both raw floats and anything with more than two decimal
+    places, and a binary float cannot represent an exact rupee amount to begin with. Sampling in
+    float internally is fine; what's *emitted* must be exact.
     """
 
     mean_log: float
@@ -60,9 +68,10 @@ class AmountCurve:
     floor: float
     ceiling: float
 
-    def sample(self, rng: Random) -> float:
+    def sample(self, rng: Random) -> Decimal:
         value = rng.lognormvariate(self.mean_log, self.sigma_log)
-        return min(max(value, self.floor), self.ceiling)
+        bounded = min(max(value, self.floor), self.ceiling)
+        return Decimal(str(bounded)).quantize(_PAISA, rounding=ROUND_HALF_UP)
 
 
 @dataclass(frozen=True)
@@ -83,7 +92,9 @@ class TypologyProfile:
     victim_behaviour: str
 
     def sample_channel(self, rng: Random) -> CashOutChannel:
-        channels: list[CashOutChannel] = [channel for channel, _weight in self.preferred_channels]
+        channels: list[CashOutChannel] = [
+            channel for channel, _weight in self.preferred_channels
+        ]
         weights: list[float] = [weight for _channel, weight in self.preferred_channels]
         chosen: CashOutChannel = rng.choices(channels, weights=weights, k=1)[0]
         return chosen
@@ -114,7 +125,9 @@ class AccountPool(Protocol):
 
     def sample_victim(self, rng: Random) -> AccountRef: ...
 
-    def sample_mule(self, rng: Random, *, near: AccountRef | None = None) -> AccountRef: ...
+    def sample_mule(
+        self, rng: Random, *, near: AccountRef | None = None
+    ) -> AccountRef: ...
 
 
 class EndpointRegistry(Protocol):
@@ -131,7 +144,7 @@ class LayeringHop:
 
     from_account: AccountRef
     to_account: AccountRef
-    amount: float
+    amount: Decimal
     occurred_at: datetime
 
 
@@ -146,7 +159,7 @@ class CashOutEvent:
     account: AccountRef
     endpoint: EndpointRef
     channel: CashOutChannel
-    amount: float
+    amount: Decimal
     occurred_at: datetime
 
 
@@ -194,12 +207,18 @@ class TypologyGenerator(ABC):
         """Produce one fraud scenario, deterministic for a given ``rng`` state (ADR-005: fixed,
         committed seeds make scenarios reproducible bit-for-bit)."""
         victim = accounts.sample_victim(rng)
-        hops, cash_out_source, clock = self._build_hops(rng, accounts, victim, fraud_initiated_at)
+        hops, cash_out_source, clock = self._build_hops(
+            rng, accounts, victim, fraud_initiated_at
+        )
 
         channel = self.profile.sample_channel(rng)
         endpoint = endpoints.sample_endpoint(rng, channel, near=cash_out_source)
-        clock = clock + timedelta(minutes=rng.uniform(*self.profile.inter_hop_delay_minutes))
-        cash_out_amount = hops[-1].amount if hops else self.profile.hop_amount.sample(rng)
+        clock = clock + timedelta(
+            minutes=rng.uniform(*self.profile.inter_hop_delay_minutes)
+        )
+        cash_out_amount = (
+            hops[-1].amount if hops else self.profile.hop_amount.sample(rng)
+        )
 
         return FraudScenario(
             scenario_id=uuid.uuid4(),
@@ -235,7 +254,9 @@ class TypologyGenerator(ABC):
         current = victim
         for _ in range(depth):
             mule = accounts.sample_mule(rng, near=current)
-            clock = clock + timedelta(minutes=rng.uniform(*self.profile.inter_hop_delay_minutes))
+            clock = clock + timedelta(
+                minutes=rng.uniform(*self.profile.inter_hop_delay_minutes)
+            )
             hops.append(
                 LayeringHop(
                     from_account=current,

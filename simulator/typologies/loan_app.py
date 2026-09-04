@@ -58,7 +58,9 @@ class LoanAppExtortionGenerator(TypologyGenerator):
         hops: list[LayeringHop] = []
         clock = fraud_initiated_at
         for _ in range(debit_count):
-            clock = clock + timedelta(minutes=rng.uniform(*self.profile.inter_hop_delay_minutes))
+            clock = clock + timedelta(
+                minutes=rng.uniform(*self.profile.inter_hop_delay_minutes)
+            )
             hops.append(
                 LayeringHop(
                     from_account=victim,
