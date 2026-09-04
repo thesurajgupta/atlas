@@ -1,1 +1,1 @@
-﻿"""ATLAS evaluation package — backs `make eval`."""
+"""ATLAS evaluation package — backs `make eval`."""
