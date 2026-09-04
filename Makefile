@@ -65,9 +65,21 @@ lint: ## Lint Python and TypeScript
 	   $(BIN)ruff check apps/api simulator ml tests; \
 	 else echo "  ⏭  lint: no Python sources yet (phase 1)"; fi
 
+# `simulator` and `ml` sit outside apps/api, so they need MYPYPATH to resolve
+# `atlas.*` and an explicit --config-file — without it mypy silently falls back
+# to non-strict defaults and reports success on code it barely checked.
+#
+# Directories with no .py files yet are skipped rather than passed to mypy,
+# which treats an empty package as an error.
 typecheck: ## Static type checking
-	@if [ -n "$$(find apps/api -name '*.py' -not -path '*/.*' 2>/dev/null | head -1)" ]; then \
-	   $(BIN)mypy apps/api; \
+	@targets=""; \
+	 for d in apps/api simulator ml; do \
+	   if [ -n "$$(find $$d -name '*.py' -not -path '*/.*' 2>/dev/null | head -1)" ]; then \
+	     targets="$$targets $$d"; \
+	   fi; \
+	 done; \
+	 if [ -n "$$targets" ]; then \
+	   MYPYPATH=apps/api $(BIN)mypy --config-file apps/api/pyproject.toml $$targets; \
 	 else echo "  ⏭  typecheck: no Python sources yet (phase 1)"; fi
 
 test: ## Run the test suite
