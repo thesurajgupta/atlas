@@ -71,6 +71,7 @@ class Settings(BaseSettings):
 
     query_budget_per_analyst_per_day: int = Field(default=500, gt=0)
     rate_limit_per_minute: int = Field(default=120, gt=0)
+    break_glass_ttl_seconds: int = Field(default=3600, gt=0)
 
     notification_provider: str = "mock"
     allow_external_notifications: bool = False

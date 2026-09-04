@@ -49,10 +49,37 @@ async def _append(session: AsyncSession, n: int = 3) -> list[AuditEvent]:
     return events
 
 
-async def test_first_event_binds_to_genesis(session: AsyncSession) -> None:
-    events = await _append(session, 1)
-    assert events[0].previous_event_hash == GENESIS_HASH
-    assert events[0].sequence >= 1
+async def test_an_appended_event_binds_to_the_current_head(
+    session: AsyncSession,
+) -> None:
+    """Whatever the head is, the next event must bind to exactly that.
+
+    This deliberately does not assume an empty table. Other tests commit audit
+    events, so asserting "the first event uses GENESIS" only passed while this
+    file ran first — an order dependency that would have surfaced later as a
+    confusing intermittent failure.
+    """
+    head_seq, head_hash = await chain_head(session)
+    event = (await _append(session, 1))[0]
+    assert event.previous_event_hash == head_hash
+    assert event.sequence == head_seq + 1
+
+
+async def test_genesis_is_used_when_the_chain_is_empty(session: AsyncSession) -> None:
+    """The empty-chain case, tested explicitly rather than assumed.
+
+    Clears the chain inside the fixture's transaction, which rolls back — so the
+    committed history other tests rely on is untouched.
+    """
+    await session.execute(text("DELETE FROM audit.audit_checkpoint"))
+    await session.execute(text("DELETE FROM audit.audit_event"))
+    sequence, head = await chain_head(session)
+    assert (sequence, head) == (0, GENESIS_HASH)
+
+    event = (await _append(session, 1))[0]
+    assert event.previous_event_hash == GENESIS_HASH
+    assert event.sequence == 1
+    await session.rollback()
 
 
 async def test_events_form_an_unbroken_chain(session: AsyncSession) -> None:

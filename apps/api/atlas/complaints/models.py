@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import DateTime, Enum, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -53,7 +54,7 @@ class Complaint(ObservationBase, Base):
     typology: Mapped[FraudTypology] = mapped_column(
         Enum(FraudTypology, name="fraud_typology", schema=SCHEMA), nullable=False
     )
-    reported_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    reported_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
 
     victim_jurisdiction_id: Mapped[uuid.UUID | None] = mapped_column(

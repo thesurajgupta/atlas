@@ -30,6 +30,9 @@ dependencies = [
   "shapely>=2.0",
   "geoalchemy2>=0.15",       # PostGIS column types for SQLAlchemy models
   "python-multipart>=0.0.17",
+  # Imported directly for BaseHTTPMiddleware. It arrives transitively via
+  # FastAPI, but a direct import deserves a direct declaration.
+  "starlette>=0.41",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +50,7 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "pytest-cov>=6.0",
-  "httpx>=0.28",
+  "httpx>=0.28",           # FastAPI TestClient
   "ruff>=0.8",
   "mypy>=1.13",
   "import-linter>=2.1",         # module boundaries (ADR-009)
@@ -92,7 +95,9 @@ ignore = ["S101"]  # assert is fine in tests
 "simulator/**" = ["S311"]   # non-crypto RNG is correct for a simulator
 # Alembic writes these files. Reformatting generated output by hand is churn and
 # produces diffs that obscure the actual schema change under review.
-"alembic/versions/*.py" = ["E501", "I001", "W291", "W293"]
+# F401 too: the migration template always imports geoalchemy2, and whether a
+# given migration uses it depends on whether it touches a geometry column.
+"alembic/versions/*.py" = ["E501", "I001", "W291", "W293", "F401"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]

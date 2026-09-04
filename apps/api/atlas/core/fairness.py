@@ -58,16 +58,36 @@ PROXY_ATTRIBUTES: frozenset[str] = frozenset(
 
 PROHIBITED: frozenset[str] = PROTECTED_ATTRIBUTES | PROXY_ATTRIBUTES
 
-# Words that legitimately contain a prohibited token as a substring. Without
-# these, `community_detection` (a graph algorithm) would be flagged as a caste
-# proxy — and a check with false positives gets suppressed, which is worse than
-# no check at all.
-_ALLOWED_EXACT: frozenset[str] = frozenset(
+# `community` is both a caste proxy in Indian usage and the standard name for
+# the output of a graph-clustering algorithm. An exact allow-list of the graph
+# spellings was the first attempt and it did not survive contact: the real
+# feature was named `community_detection_cluster_size`, which is on nobody's
+# list and is plainly not about caste.
+#
+# The rule instead is contextual. `community` is permitted only when a
+# graph-algorithm qualifier appears alongside it in the same name. That keeps
+# `applicant_community` and `community_of_origin` prohibited, which is where the
+# accidental version of this mistake actually looks like — a well-meaning
+# connector field, not somebody deciding to use caste.
+#
+# It does not stop deliberate evasion, and no name-based check can. It exists to
+# catch the accident, and a check with false positives gets suppressed, which is
+# worse than no check at all.
+_GRAPH_QUALIFIERS: frozenset[str] = frozenset(
     {
-        "community_id",
-        "community_detection",
-        "community_size",
-        "cluster_community",
+        "detection",
+        "detect",
+        "cluster",
+        "clusters",
+        "clustering",
+        "louvain",
+        "modularity",
+        "component",
+        "components",
+        "partition",
+        "id",
+        "size",
+        "count",
     }
 )
 
@@ -92,12 +112,11 @@ def is_prohibited(field_name: str) -> bool:
     ``community_detection`` for containing "community", and a noisy check is one
     people learn to ignore.
     """
-    normalised = field_name.lower()
-    if normalised in _ALLOWED_EXACT:
+    tokens = _tokenise(field_name)
+    hits = set(tokens) & _SINGLE_TOKEN
+    if hits == {"community"} and set(tokens) & _GRAPH_QUALIFIERS:
         return False
-
-    tokens = _tokenise(normalised)
-    if set(tokens) & _SINGLE_TOKEN:
+    if hits:
         return True
 
     for phrase in _PHRASES:
