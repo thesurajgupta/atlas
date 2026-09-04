@@ -26,6 +26,7 @@ from atlas.audit.service import record as audit_record
 from atlas.complaints.models import Complaint
 from atlas.core import context
 from atlas.core.classification import Classification
+from atlas.core.events import STREAM_COMPLAINTS, Event, EventBus
 from atlas.ingest.ports import DataConnector, RawRecord
 from atlas.ingest.quality import QualityReport
 
@@ -67,12 +68,18 @@ async def ingest_complaints(
     connector: DataConnector,
     *,
     actor: Actor | None = None,
+    bus: EventBus | None = None,
 ) -> IngestionOutcome:
     """Run one batch through the pipeline.
 
     Rejected records are counted by reason and reported. They are never silently
     dropped: a pipeline quietly discarding 5% of complaints is indistinguishable
     from one receiving 5% fewer, and only one of those is a bug.
+
+    When a ``bus`` is supplied, each accepted complaint is published so the graph,
+    feature and prediction stages can react without ingestion knowing they exist.
+    Publishing happens after the row is flushed, so a consumer that reads
+    immediately finds the complaint rather than racing the write.
     """
     report = QualityReport()
     batch_id = uuid.uuid4()
@@ -107,6 +114,22 @@ async def ingest_complaints(
             continue
 
         report.accepted += 1
+
+        if bus is not None:
+            await bus.publish(
+                STREAM_COMPLAINTS,
+                Event(
+                    type="complaint.ingested",
+                    correlation_id=context.get_correlation_id(),
+                    payload={
+                        "complaint_id": str(complaint.id),
+                        "public_ref": complaint.public_ref,
+                        "typology": complaint.typology.value,
+                        "jurisdiction_id": str(complaint.victim_jurisdiction_id),
+                        "observed_at": complaint.observed_at.isoformat(),
+                    },
+                ),
+            )
 
     suspect = report.total > 0 and report.acceptance_rate < MIN_ACCEPTANCE_RATE
 
