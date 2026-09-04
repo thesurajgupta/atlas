@@ -42,6 +42,16 @@ def _database_reachable() -> bool:
         return False
 
 
+#: Fixtures that cannot work without PostgreSQL.
+#:
+#: ``session`` was the only entry until a run with Docker stopped produced a wall
+#: of asyncpg tracebacks from the API tests — which take ``client``, not
+#: ``session``, and so were never skipped. The skip logic below existed
+#: specifically to prevent that, and half-worked, which is worse than not
+#: existing: it made the remaining failures look like broken code rather than a
+#: stopped container.
+DB_FIXTURES: frozenset[str] = frozenset({"session", "client"})
+
 _DB_UP: bool | None = None
 
 
@@ -59,7 +69,7 @@ def pytest_collection_modifyitems(config, items) -> None:  # type: ignore[no-unt
     skips on a developer machine.
     """
     global _DB_UP
-    needs_db = [i for i in items if "session" in getattr(i, "fixturenames", ())]
+    needs_db = [i for i in items if DB_FIXTURES & set(getattr(i, "fixturenames", ()))]
     if not needs_db:
         return
     if _DB_UP is None:

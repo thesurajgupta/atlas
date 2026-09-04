@@ -94,7 +94,7 @@ class EventBus(ABC):
 class RedisEventBus(EventBus):
     """Redis Streams with consumer groups."""
 
-    def __init__(self, redis: Redis) -> None:
+    def __init__(self, redis: Redis[str]) -> None:
         self._redis = redis
 
     async def publish(self, stream: str, event: Event) -> str:
@@ -153,7 +153,9 @@ class RedisEventBus(EventBus):
                 logger.exception("event.handler_failed", stream=stream, message_id=str(message_id))
                 await self._maybe_dead_letter(stream, group, message_id, fields)
                 continue
-            await self._redis.xack(stream, group, message_id)
+            # redis-py leaves xack unannotated; the ignore is scoped to that,
+            # not to the call's arguments, which mypy still checks.
+            await self._redis.xack(stream, group, message_id)  # type: ignore[no-untyped-call]
             processed += 1
         return processed
 
@@ -176,8 +178,8 @@ class RedisEventBus(EventBus):
         dlq_fields: dict[str, str] = dict(fields)
         dlq_fields["original_stream"] = stream
         dlq_fields["deliveries"] = str(deliveries)
-        await self._redis.xadd(DEAD_LETTER_STREAM, dlq_fields)  # type: ignore[arg-type]
-        await self._redis.xack(stream, group, message_id)
+        await self._redis.xadd(DEAD_LETTER_STREAM, dlq_fields)
+        await self._redis.xack(stream, group, message_id)  # type: ignore[no-untyped-call]
         logger.warning(
             "event.dead_lettered", stream=stream, message_id=str(message_id), deliveries=deliveries
         )
