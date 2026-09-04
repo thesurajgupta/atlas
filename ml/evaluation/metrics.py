@@ -20,10 +20,9 @@ from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-
 
 REPORT_DIR = Path("reports/eval")
 
@@ -213,7 +212,7 @@ def _current_git_sha() -> str:
         return subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"], text=True
         ).strip()
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return "unknown"
 
 
@@ -245,7 +244,7 @@ def generate_report(tier1: Tier1Result, tier2: Tier2Result, tier3: Tier3Result,
 
 def write_report(report: dict) -> Path:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = REPORT_DIR / f"eval_{report['git_sha']}_{int(datetime.now().timestamp())}.json"
+    out_path = REPORT_DIR / f"eval_{report['git_sha']}_{int(datetime.now(timezone.utc).timestamp())}.json"
     out_path.write_text(json.dumps(report, indent=2))
     return out_path
 
