@@ -7,8 +7,8 @@ Two owners from here:
 | | |
 |---|---|
 | **Lucky** (@luckykhan933-byte) | All frontend |
-| **Raj** (@Rkamal21) | Backend |
-| Suraj (@thesurajgupta) | ML path, prediction, review |
+| **Raj** (@Rkamal21) | Backend and the ML path |
+| Suraj (@thesurajgupta) | Review, architecture, whatever is blocking |
 
 Vijay (@Vijayvardhanji) stays on the simulator — issues [#45](https://github.com/thesurajgupta/atlas/issues/45) and [#50](https://github.com/thesurajgupta/atlas/issues/50) block the entire ML path and are the highest-priority items in the repository.
 
@@ -222,9 +222,19 @@ GET /api/v1/graph/neighbourhood/{kind}/{id}   artefact links, scoped
 
 ---
 
-## Do not start on
+## 4. Feature pipeline (#66) and Tier 1 forecast (#67)
 
-`atlas/predict/` — that is mine, and it is blocked on #50 anyway.
+The ML path is yours too. Both are blocked on #50 — cash-out location is
+currently assigned at random, so every model scores exactly chance — but the
+pipeline can be written and tested against seeded data in the meantime.
+
+Read `ml/probe/run.py` before starting either. It is forty lines of diagnostics
+that establish whether a dataset has signal in it at all, and running it first
+is what stops a model's flat result being mistaken for a finding about the
+problem.
+
+Take #62 first regardless. It unblocks your own money-trail page and it is the
+smallest of the five.
 
 ---
 
