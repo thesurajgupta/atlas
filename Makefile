@@ -43,8 +43,8 @@ redis-cli: ## Open a redis-cli shell
 	docker compose exec redis redis-cli
 
 # ---------------------------------------------------------------- verification
-.PHONY: verify verify-docs verify-secrets verify-compose lint typecheck test
-verify: verify-docs verify-compose verify-secrets lint typecheck verify-boundaries test ## Full pre-push check
+.PHONY: verify verify-docs verify-secrets verify-compose lint typecheck test verify-web
+verify: verify-docs verify-compose verify-secrets lint typecheck verify-boundaries verify-web test ## Full pre-push check
 	@echo ""
 	@echo "  ✅  verify passed"
 
@@ -65,9 +65,21 @@ lint: ## Lint Python and TypeScript
 	   $(BIN)ruff check apps/api simulator ml tests; \
 	 else echo "  ⏭  lint: no Python sources yet (phase 1)"; fi
 
+# `simulator` and `ml` sit outside apps/api, so they need MYPYPATH to resolve
+# `atlas.*` and an explicit --config-file — without it mypy silently falls back
+# to non-strict defaults and reports success on code it barely checked.
+#
+# Directories with no .py files yet are skipped rather than passed to mypy,
+# which treats an empty package as an error.
 typecheck: ## Static type checking
-	@if [ -n "$$(find apps/api -name '*.py' -not -path '*/.*' 2>/dev/null | head -1)" ]; then \
-	   $(BIN)mypy apps/api; \
+	@targets=""; \
+	 for d in apps/api simulator ml; do \
+	   if [ -n "$$(find $$d -name '*.py' -not -path '*/.*' 2>/dev/null | head -1)" ]; then \
+	     targets="$$targets $$d"; \
+	   fi; \
+	 done; \
+	 if [ -n "$$targets" ]; then \
+	   MYPYPATH=apps/api $(BIN)mypy --config-file apps/api/pyproject.toml $$targets; \
 	 else echo "  ⏭  typecheck: no Python sources yet (phase 1)"; fi
 
 test: ## Run the test suite
@@ -76,6 +88,21 @@ test: ## Run the test suite
 	 else echo "  ⏭  test: no tests yet (phase 1)"; fi
 
 # ---------------------------------------------------------------- boundaries
+# `tsc --noEmit` and `eslint` both pass on an empty `app/page.tsx`; only a real
+# `next build` rejects it. Kept in `verify` so a frontend change is checked the
+# same way locally and in CI — the two drifting apart is what let `mypy --strict`
+# go unrun for weeks (see the commit that fixed it).
+#
+# Skipped entirely when apps/web has no dependencies installed, so backend work
+# does not require a node toolchain.
+verify-web: ## Build, lint and typecheck the web app
+	@if [ -f apps/web/package.json ]; then \
+	   if [ -d apps/web/node_modules ]; then \
+	     cd apps/web && npx tsc --noEmit && npx eslint . && npm run build >/dev/null \
+	       && echo "  ✓ web builds, lints and typechecks"; \
+	   else echo "  ⏭  web: node_modules missing — run 'cd apps/web && npm ci' to include it"; fi; \
+	 else echo "  ⏭  web: no web app yet"; fi
+
 .PHONY: verify-boundaries
 verify-boundaries: ## Enforce module import boundaries (ADR-009) + leakage gate 1
 	@if [ -f .importlinter ] && [ -d apps/api/atlas ]; then \

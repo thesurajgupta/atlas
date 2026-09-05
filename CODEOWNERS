@@ -1,21 +1,19 @@
 # ATLAS code owners.
 #
 # ---------------------------------------------------------------------------
-# READ THIS FIRST: this file does NOT restrict who can change what.
+# THIS FILE IS A GATE. "Require review from Code Owners" is ENABLED on main.
 #
-# Anyone on the team can contribute to any part of this codebase. CODEOWNERS
-# only auto-requests a reviewer so changes reach someone with context — it is a
-# COORDINATION tool, not a permission system.
+# You can still change ANY part of this codebase — nothing here restricts what
+# you may edit. What it controls is who signs off: every pull request needs an
+# approval from @thesurajgupta before it can merge.
 #
-# "Require review from Code Owners" is deliberately NOT enabled on main. Any
-# teammate's approval satisfies branch protection. If you want to improve the
-# ML pipeline, the map, the audit chain or the docs, open a PR — you do not
-# need to own the area.
+# So: work anywhere, open a PR, tag Suraj. A teammate's approval is welcome and
+# useful, but it does not by itself satisfy the gate.
 #
-# The exception is judgement, not permission: for the sensitive paths at the
-# bottom, please wait for the listed reviewer rather than merging on the first
-# approval you get. Those are the areas where a subtle mistake is expensive and
-# hard to detect later.
+# Known trade-off: Suraj cannot approve his own pull requests — GitHub does not
+# allow it. Admin bypass is therefore left on so his PRs can merge once CI is
+# green. That means his own code merges unreviewed, which is a deliberate
+# decision, not an oversight. Anyone is encouraged to review his PRs anyway.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------

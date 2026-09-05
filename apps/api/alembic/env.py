@@ -26,6 +26,7 @@ from atlas.core.config import get_settings
 from atlas.core.database import Base
 from atlas.entity import models as entity_models  # noqa: F401
 from atlas.geo import models as geo_models  # noqa: F401
+from atlas.graph import models as graph_models  # noqa: F401
 from atlas.iam import models as iam_models  # noqa: F401
 
 NameFilterType = Literal[
