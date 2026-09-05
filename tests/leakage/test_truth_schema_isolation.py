@@ -12,10 +12,49 @@ where every role can read everything.
 from __future__ import annotations
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.leakage
+
+
+@pytest_asyncio.fixture(autouse=True, scope="module")
+async def _truth_tables(settings) -> None:  # type: ignore[no-untyped-def]
+    """Make sure the ground-truth tables exist before asserting on them.
+
+    They are created by `python -m simulator`, not by a migration — the serving
+    deployment should not own the answer key (spec §23.2). CI runs migrations
+    and never runs the simulator, so without this the table-level assertions
+    below error with `relation "truth.scenario" does not exist` instead of
+    testing anything.
+
+    Creating them here rather than skipping is deliberate. A skip would leave
+    the strongest gate in the project silently not running in CI, which is the
+    failure mode this repository keeps rediscovering — and the schema-level
+    USAGE check would be the only thing left standing.
+
+    Connects as atlas_sim because that is the only role with CREATE on `truth`.
+    Tests may reach the simulator; the serving path may not, and the import
+    contract enforces that separately.
+    """
+    from urllib.parse import quote_plus
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from simulator.truth.writer import ensure_schema
+
+    url = (
+        f"postgresql+asyncpg://{quote_plus('atlas_sim')}:"
+        f"{quote_plus(settings.db_password)}@{settings.db_host}:"
+        f"{settings.db_port}/{settings.db_name}"
+    )
+    engine = create_async_engine(url)
+    try:
+        await ensure_schema(engine)
+    finally:
+        await engine.dispose()
+
 
 SERVING_ROLES = ("atlas_app", "atlas_features")
 
