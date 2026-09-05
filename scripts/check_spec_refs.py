@@ -5,6 +5,7 @@ The predecessor document accumulated stale section references as it was edited.
 A dangling reference in a specification is a small thing that erodes trust in a
 large thing, so this runs in CI.
 """
+
 from __future__ import annotations
 
 import re
@@ -28,10 +29,10 @@ def main() -> int:
         return 1
 
     text = SPEC.read_text(encoding="utf-8")
-    sections = {int(m.group(1)) for m in re.finditer(r"^## (\d+)\.", text, re.M)}
+    sections = {int(m.group(1)) for m in re.finditer(r"^## (\d+)\.", text, re.MULTILINE)}
     subsections = {
         (int(m.group(1)), int(m.group(2)))
-        for m in re.finditer(r"^### (\d+)\.(\d+)", text, re.M)
+        for m in re.finditer(r"^### (\d+)\.(\d+)", text, re.MULTILINE)
     }
     if not sections:
         print("  ✗ no numbered sections found in the spec")
@@ -73,10 +74,10 @@ def main() -> int:
     # Repo-wide audit. Stale §refs were found in .env.example and two SQL files
     # that a spec-only check could never see, because they live outside docs/.
     skip_files = {
-        "docs/ATLAS_MASTER_SPEC.md",                          # checked above
-        "docs/architecture/reference-systems-and-design.md",   # own numbering
-        "docs/archive/original-brief.md",                      # superseded
-        "scripts/check_spec_refs.py",                          # this file
+        "docs/ATLAS_MASTER_SPEC.md",  # checked above
+        "docs/architecture/reference-systems-and-design.md",  # own numbering
+        "docs/archive/original-brief.md",  # superseded
+        "scripts/check_spec_refs.py",  # this file
     }
     skip_dirs = {".git", ".venv", "node_modules", "__pycache__", "reports"}
     scanned = 0
@@ -95,11 +96,11 @@ def main() -> int:
         scanned += 1
         for m in re.finditer(r"§(\d+)(?:\.(\d+))?", body):
             n = int(m.group(1))
-            if n > 100:          # legal citations such as §314(a)
+            if n > 100:  # legal citations such as §314(a)
                 continue
             line_start = body.rfind("\n", 0, m.start()) + 1
             if EXTERNAL_CITATION.search(body[line_start : m.start()]):
-                continue         # "RFC 7518 §3.2", "PEP 503 §2" and the like
+                continue  # "RFC 7518 §3.2", "PEP 503 §2" and the like
             line = body[: m.start()].count("\n") + 1
             if n not in sections:
                 failures.append(f"    {rel}:{line}: {m.group(0)} -> no such section")
@@ -112,9 +113,11 @@ def main() -> int:
             print(f)
         return 1
 
-    print(f"  ✓ spec cross-references OK "
-          f"({len(sections)} sections, {len(subsections)} subsections, "
-          f"{scanned} other files referencing them)")
+    print(
+        f"  ✓ spec cross-references OK "
+        f"({len(sections)} sections, {len(subsections)} subsections, "
+        f"{scanned} other files referencing them)"
+    )
     return 0
 
 

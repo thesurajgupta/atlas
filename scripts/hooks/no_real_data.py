@@ -5,6 +5,7 @@ Heuristic and deliberately conservative — it is a backstop for human error, no
 substitute for judgement (ADR-010). False positives are acceptable; a single real
 Aadhaar number reaching a public repository is not.
 """
+
 from __future__ import annotations
 
 import re
@@ -46,10 +47,16 @@ def check(path: Path) -> list[str]:
     if any(marker in text for marker in SYNTHETIC_MARKERS):
         return problems
 
-    for label, pattern in (("Aadhaar-like", AADHAAR), ("PAN-like", PAN), ("IFSC-like", IFSC)):
+    for label, pattern in (
+        ("Aadhaar-like", AADHAAR),
+        ("PAN-like", PAN),
+        ("IFSC-like", IFSC),
+    ):
         hits = pattern.findall(text)
         if hits:
-            problems.append(f"{posix}: {len(hits)} {label} value(s), first={hits[0][:4]}…")
+            problems.append(
+                f"{posix}: {len(hits)} {label} value(s), first={hits[0][:4]}…"
+            )
 
     return problems
 

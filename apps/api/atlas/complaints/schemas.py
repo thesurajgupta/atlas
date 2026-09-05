@@ -44,3 +44,14 @@ class ComplaintResponse(BaseModel):
     victim_jurisdiction_id: uuid.UUID | None
     is_synthetic: bool
     golden_hour_minutes_elapsed: int | None = None
+
+
+class ComplaintListResponse(BaseModel):
+    """Complaints the caller may see, with the total *they* can see.
+
+    ``total`` is scoped to the caller's jurisdiction, not the table count —
+    a global total would leak how much exists elsewhere.
+    """
+
+    items: list[ComplaintResponse]
+    total: int
