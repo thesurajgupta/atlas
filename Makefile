@@ -43,8 +43,8 @@ redis-cli: ## Open a redis-cli shell
 	docker compose exec redis redis-cli
 
 # ---------------------------------------------------------------- verification
-.PHONY: verify verify-docs verify-secrets verify-compose lint typecheck test
-verify: verify-docs verify-compose verify-secrets lint typecheck verify-boundaries test ## Full pre-push check
+.PHONY: verify verify-docs verify-secrets verify-compose lint typecheck test verify-web
+verify: verify-docs verify-compose verify-secrets lint typecheck verify-boundaries verify-web test ## Full pre-push check
 	@echo ""
 	@echo "  ✅  verify passed"
 
@@ -88,6 +88,21 @@ test: ## Run the test suite
 	 else echo "  ⏭  test: no tests yet (phase 1)"; fi
 
 # ---------------------------------------------------------------- boundaries
+# `tsc --noEmit` and `eslint` both pass on an empty `app/page.tsx`; only a real
+# `next build` rejects it. Kept in `verify` so a frontend change is checked the
+# same way locally and in CI — the two drifting apart is what let `mypy --strict`
+# go unrun for weeks (see the commit that fixed it).
+#
+# Skipped entirely when apps/web has no dependencies installed, so backend work
+# does not require a node toolchain.
+verify-web: ## Build, lint and typecheck the web app
+	@if [ -f apps/web/package.json ]; then \
+	   if [ -d apps/web/node_modules ]; then \
+	     cd apps/web && npx tsc --noEmit && npx eslint . && npm run build >/dev/null \
+	       && echo "  ✓ web builds, lints and typechecks"; \
+	   else echo "  ⏭  web: node_modules missing — run 'cd apps/web && npm ci' to include it"; fi; \
+	 else echo "  ⏭  web: no web app yet"; fi
+
 .PHONY: verify-boundaries
 verify-boundaries: ## Enforce module import boundaries (ADR-009) + leakage gate 1
 	@if [ -f .importlinter ] && [ -d apps/api/atlas ]; then \
