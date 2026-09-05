@@ -1,3 +1,20 @@
+<<<<<<< HEAD
+﻿import type { Config } from 'tailwindcss';
+
+const config: Config = {
+  content: [
+    './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        background: '#0b0e14',
+        surface: '#121721',
+        sidebar: '#0f141d',
+        card: '#161c26',
+=======
 import type { Config } from "tailwindcss";
 
 // Design tokens for the investigator interface (spec §25.5):
@@ -60,6 +77,7 @@ const config: Config = {
         xs: ["0.75rem", { lineHeight: "1.1rem" }],
         sm: ["0.8125rem", { lineHeight: "1.2rem" }],
         base: ["0.875rem", { lineHeight: "1.35rem" }],
+>>>>>>> origin/main
       },
     },
   },
