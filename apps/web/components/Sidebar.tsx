@@ -11,7 +11,7 @@ const navItems = [
   { label: "Investigation", icon: Search, href: "/dashboard/investigation" },
   { label: "Transaction Trail", icon: GitFork, href: "/dashboard/transaction-trail" },
   { label: "Network Graph", icon: Network, href: "/dashboard/network-graph" },
-  { label: "ATM / Branch Map", icon: MapPin, href: "/dashboard/ATM-BranchMap", active: true },
+  { label: "ATM / Branch Map", icon: MapPin, href: "/dashboard/ATM-BranchMap",  },
   { label: "Predicted Locations", icon: Radio, href: "/dashboard/predicted-locations" },
   { label: "Alerts", icon: AlertTriangle, href: "/dashboard/alerts", badge: "12" },
   { label: "Reports", icon: FileText, href: "/dashboard/reports" },
