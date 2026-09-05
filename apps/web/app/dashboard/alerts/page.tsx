@@ -1,560 +1,295 @@
+// tailwind.config.ts reference for required tokens:
+// colors: {
+//   severity: {
+//     critical: { bg: 'bg-red-950/40', text: 'text-red-400', border: 'border-red-800/50' },
+//     high: { bg: 'bg-orange-950/40', text: 'text-orange-400', border: 'border-orange-800/50' },
+//     medium: { bg: 'bg-yellow-950/40', text: 'text-yellow-400', border: 'border-yellow-800/50' },
+//     low: { bg: 'bg-blue-950/40', text: 'text-blue-400', border: 'border-blue-800/50' },
+//   }
+// }
 
 'use client';
 
-import React, { useState } from 'react';
-import Sidebar from '@/components/Sidebar';
+import React, { useState, useMemo } from 'react';
+import Sidebar from '@/components/Sidebar'; 
 
-import {
-  Search,
-  Bell,
-  Shield,
-  User,
-  FileText,
-  Activity,
-  MapPin,
-  AlertTriangle,
-  Users,
-  Settings,
-  Filter,
-  ChevronDown,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  ArrowUpRight,
-  ShieldAlert,
-  Terminal,
-  Zap,
-  MoreVertical,
-  Check,
-  Ban,
-  ExternalLink,
-  ChevronLeft,
-  ChevronRight
-} from 'lucide-react';
+type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
-// --- MOCK ALERTS DATA ---
-const INITIAL_ALERTS = [
+interface Alert {
+  id: string;
+  timestamp: string;
+  severity: Severity;
+  caseRef: string;
+  typology: string;
+  amountAtRisk: number;
+  reason: string;
+  isSuppressed: boolean;
+  suppressionReason?: string;
+}
+
+const MOCK_ALERTS: Alert[] = [
   {
-    id: 'ALT-2026-9041',
-    title: 'High Velocity Mule Account Drain',
-    source: 'Automated Rule #402',
-    timestamp: '2 mins ago',
-    fullTime: '05 Sep 2026, 06:12:04 PM',
-    severity: 'Critical',
-    category: 'Transaction Anomaly',
-    account: 'ACC-8849-1029',
-    entityName: 'Rohit Sharma (Mule Network A)',
-    amount: '₹4,50,000',
-    location: 'Mumbai, MH',
-    ipAddress: '185.220.101.45 (Tor Exit)',
-    status: 'Active',
-    description: 'Rapid sequential withdrawals detected across 3 distinct ATM terminals within a 90-second window. High probability of structured cash-out scheme.',
-    recommendedActions: [
-      'Freeze Target Account ACC-8849-1029',
-      'Notify Regional Cyber Patrol Units',
-      'Issue Emergency Lock on Associated Gateway'
-    ]
+    id: 'ALT-1001',
+    timestamp: '2026-03-01T10:45:00Z',
+    severity: 'CRITICAL',
+    caseRef: 'CASE-2026-8821',
+    typology: 'Unauthorized Cash Withdrawal',
+    amountAtRisk: 250000,
+    reason: 'Multiple high-value ATM withdrawals detected in rapid succession across geographically impossible locations within 15 minutes.',
+    isSuppressed: false,
   },
   {
-    id: 'ALT-2026-9040',
-    title: 'Spoofed Banking Portal Domain Registered',
-    source: 'Domain Threat Monitor',
-    timestamp: '14 mins ago',
-    fullTime: '05 Sep 2026, 06:00:11 PM',
-    severity: 'High',
-    category: 'Phishing Intelligence',
-    account: 'N/A',
-    entityName: 'hfdc-secure-verify.net',
-    amount: 'N/A',
-    location: 'Hosted in Eastern Europe',
-    ipAddress: '91.218.114.208',
-    status: 'Active',
-    description: 'Newly registered lookalike domain mimicking primary retail banking login screen. Active phishing kit detected serving malicious payload.',
-    recommendedActions: [
-      'Issue Takedown Request to Registrar',
-      'Update Global DNS Sinkhole List',
-      'Broadcast Advisory to Monitoring Nodes'
-    ]
+    id: 'ALT-1002',
+    timestamp: '2026-03-01T09:15:00Z',
+    severity: 'HIGH',
+    caseRef: 'CASE-2026-8819',
+    typology: 'Account Takeover (ATO)',
+    amountAtRisk: 85000,
+    reason: 'Password reset followed immediately by beneficiary addition and maximum limit wire transfer request from an unrecognized IP address.',
+    isSuppressed: false,
   },
   {
-    id: 'ALT-2026-9039',
-    title: 'Sim-Swap Event On High-Risk Profile',
-    source: 'Telecom Gateway Sync',
-    timestamp: '38 mins ago',
-    fullTime: '05 Sep 2026, 05:36:22 PM',
-    severity: 'High',
-    category: 'Identity Hijack',
-    account: 'ACC-1102-4491',
-    entityName: 'Amit Verma',
-    amount: 'N/A',
-    location: 'Delhi, DL',
-    ipAddress: '103.21.126.12',
-    status: 'Acknowledged',
-    description: 'Unscheduled SIM card replacement performed via carrier kiosk followed immediately by OTP requests for high-value fund transfers.',
-    recommendedActions: [
-      'Temporary OTP Lockout on Mobile Number',
-      'Contact Carrier Fraud Counterpart'
-    ]
+    id: 'ALT-1003',
+    timestamp: '2026-02-28T18:30:00Z',
+    severity: 'MEDIUM',
+    caseRef: 'CASE-2026-8790',
+    typology: 'Structuring / Smurfing',
+    amountAtRisk: 48000,
+    reason: 'Series of sub-threshold cash deposits completed at three distinct branch kiosks within a 2-hour window.',
+    isSuppressed: false,
   },
   {
-    id: 'ALT-2026-9038',
-    title: 'Multiple Failed Biometric Authentications',
-    source: 'Mobile App Telemetry',
-    timestamp: '1 hour ago',
-    fullTime: '05 Sep 2026, 05:10:00 PM',
-    severity: 'Medium',
-    category: 'Authentication',
-    account: 'ACC-3391-8820',
-    entityName: 'Priya Nair',
-    amount: 'N/A',
-    location: 'Bengaluru, KA',
-    ipAddress: '49.207.210.88',
-    status: 'Acknowledged',
-    description: '12 consecutive biometric verification failures logged from an unregistered hardware device ID.',
-    recommendedActions: [
-      'Enforce Password Reset on Next Login',
-      'Require Secondary Multi-Factor Verification'
-    ]
+    id: 'ALT-1004',
+    timestamp: '2026-02-28T14:20:00Z',
+    severity: 'LOW',
+    caseRef: 'CASE-2026-8755',
+    typology: 'Velocity Spike',
+    amountAtRisk: 12500,
+    reason: 'Card transactions exceeded standard daily transaction count baseline by 300%.',
+    isSuppressed: false,
   },
   {
-    id: 'ALT-2026-9037',
-    title: 'ATM Cash-Out Geo-Fence Violation',
-    source: 'Geofence Patrol Engine',
-    timestamp: '2 hours ago',
-    fullTime: '05 Sep 2026, 04:15:30 PM',
-    severity: 'Medium',
-    category: 'Location Intelligence',
-    account: 'ACC-9910-3341',
-    entityName: 'Vikram Mehta',
-    amount: '₹80,000',
-    location: 'Kolkata, WB',
-    ipAddress: '117.211.88.3',
-    status: 'Resolved',
-    description: 'Cardless cash withdrawal triggered outside user regular geographic boundary profile.',
-    recommendedActions: [
-      'Confirm Cardholder Location via App Push'
-    ]
+    id: 'ALT-1005',
+    timestamp: '2026-02-27T11:00:00Z',
+    severity: 'HIGH',
+    caseRef: 'CASE-2026-8701',
+    typology: 'Mule Account Activity',
+    amountAtRisk: 150000,
+    reason: 'Dormant account suddenly received multiple inbound P2P transfers followed by immediate full liquidation via ATM.',
+    isSuppressed: true,
+    suppressionReason: 'Whitelisted entity under pre-approved corporate payroll testing protocol.',
   },
   {
-    id: 'ALT-2026-9036',
-    title: 'Bulk Micro-Deposits Detected (Structuring)',
-    source: 'AML Pattern Matcher',
-    timestamp: '3 hours ago',
-    fullTime: '05 Sep 2026, 03:00:19 PM',
-    severity: 'Low',
-    category: 'Transaction Anomaly',
-    account: 'ACC-7721-0092',
-    entityName: 'Unknown Syndicate Node',
-    amount: '₹49,999 (x 15)',
-    location: 'Jaipur, RJ',
-    ipAddress: '122.160.44.19',
-    status: 'Dismissed',
-    description: 'Series of 15 deposits kept strictly below the mandatory PAN verification limit within 45 minutes.',
-    recommendedActions: [
-      'File Suspicious Activity Report (SAR)',
-      'Tag Associated Bank Accounts'
-    ]
-  }
+    id: 'ALT-1006',
+    timestamp: '2026-02-26T16:45:00Z',
+    severity: 'LOW',
+    caseRef: 'CASE-2026-8650',
+    typology: 'Geographic Anomaly',
+    amountAtRisk: 3200,
+    reason: 'POS purchase initiated from foreign jurisdiction without prior travel notice submission.',
+    isSuppressed: true,
+    suppressionReason: 'Rule auto-suppression triggered: User confirmed travel status via automated SMS verification.',
+  },
 ];
 
-export default function AlertsDashboard() {
-  // State Management
-  const [alerts, setAlerts] = useState(INITIAL_ALERTS);
-  const [selectedAlert, setSelectedAlert] = useState<typeof INITIAL_ALERTS[0]>(INITIAL_ALERTS[0]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [severityFilter, setSeverityFilter] = useState('All');
-  const [categoryFilter, setCategoryFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
-
-  // Filter Logic
-  const filteredAlerts = alerts.filter((alt) => {
-    const matchesSearch =
-      alt.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      alt.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      alt.entityName.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesSeverity = severityFilter === 'All' || alt.severity === severityFilter;
-    const matchesCategory = categoryFilter === 'All' || alt.category === categoryFilter;
-    const matchesStatus = statusFilter === 'All' || alt.status === statusFilter;
-
-    return matchesSearch && matchesSeverity && matchesCategory && matchesStatus;
-  });
-
-  // Action Handlers for Lifecycle Management
-  const handleUpdateStatus = (id: string, newStatus: string) => {
-    const updated = alerts.map((alt) => (alt.id === id ? { ...alt, status: newStatus } : alt));
-    setAlerts(updated);
-    if (selectedAlert.id === id) {
-      setSelectedAlert({ ...selectedAlert, status: newStatus });
-    }
-  };
-
-  // Badge Color Generators
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
-      case 'Critical':
-        return 'bg-rose-500/10 text-rose-400 border-rose-500/30 font-bold animate-pulse';
-      case 'High':
-        return 'bg-amber-500/10 text-amber-400 border-amber-500/30 font-semibold';
-      case 'Medium':
-        return 'bg-blue-500/10 text-blue-400 border-blue-500/30 font-medium';
-      case 'Low':
-        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-      default:
-        return 'bg-slate-800 text-slate-400 border-slate-700';
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Active':
-        return 'bg-rose-500/10 text-rose-400 border-rose-500/30';
-      case 'Acknowledged':
-        return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
-      case 'Resolved':
-        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-      case 'Dismissed':
-        return 'bg-slate-800 text-slate-400 border-slate-700';
-      default:
-        return 'bg-slate-800 text-slate-400 border-slate-700';
-    }
+const SeverityChip = ({ severity }: { severity: Severity }) => {
+  const tokenMap: Record<Severity, string> = {
+    CRITICAL: 'bg-red-950/50 text-red-400 border-red-800/60',
+    HIGH: 'bg-orange-950/50 text-orange-400 border-orange-800/60',
+    MEDIUM: 'bg-yellow-950/50 text-yellow-400 border-yellow-800/60',
+    LOW: 'bg-blue-950/50 text-blue-400 border-blue-800/60',
   };
 
   return (
-    <div className="flex h-screen bg-[#070A11] text-slate-200 font-sans overflow-hidden">
-      {/* Sidebar Nav */}
-      <Sidebar />
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tokenMap[severity]}`}>
+      {severity}
+    </span>
+  );
+};
 
-      {/* Main Workspace */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header Bar */}
-        <header className="h-16 bg-[#0B0F19] border-b border-slate-800/80 flex items-center justify-between px-6 shrink-0">
+export default function AtlasAlertsPage() {
+  const [selectedSeverity, setSelectedSeverity] = useState<string>('ALL');
+  const [isSuppressedOpen, setIsSuppressedOpen] = useState<boolean>(false);
+
+  const activeAlerts = useMemo(() => {
+    return MOCK_ALERTS
+      .filter((alert) => !alert.isSuppressed)
+      .filter((alert) => selectedSeverity === 'ALL' || alert.severity === selectedSeverity)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [selectedSeverity]);
+
+  const suppressedAlerts = useMemo(() => {
+    return MOCK_ALERTS
+      .filter((alert) => alert.isSuppressed)
+      .filter((alert) => selectedSeverity === 'ALL' || alert.severity === selectedSeverity)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [selectedSeverity]);
+
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
+
+  const formatDate = (isoStr: string) =>
+    new Date(isoStr).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+
+
+  return (
+    <div className="flex h-screen bg-[#070c14] text-slate-200 font-sans overflow-hidden">
+      {/* Sidebar matching ATLAS visual hierarchy */}
+    <Sidebar />
+
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top App Header */}
+        <header className="h-14 bg-[#09111e] border-b border-slate-800/80 px-6 flex items-center justify-between shrink-0">
+          {/* Global Search Bar */}
           <div className="relative w-96">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search threat alerts, entities, accounts, or IDs..."
-              className="w-full bg-[#070A11] border border-slate-800 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              placeholder="Search cases, accounts, locations, or transaction IDs..."
+              className="w-full bg-[#0d1726] text-xs text-slate-200 placeholder-slate-500 pl-8 pr-10 py-2 rounded-md border border-slate-800 focus:outline-none focus:border-blue-500"
             />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700">
-              ⌘K
-            </span>
+            <span className="absolute left-2.5 top-2 text-slate-500 text-xs">🔍</span>
+            <span className="absolute right-2.5 top-2 text-[10px] text-slate-500 border border-slate-700 px-1 rounded">⌘ K</span>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <button className="relative p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
+          {/* User Profile Info */}
+          <div className="flex items-center gap-4">
+            <button className="relative text-slate-400 hover:text-slate-200">
+              🔔
+              <span className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-red-600 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
+                12
+              </span>
             </button>
-            <div className="flex items-center space-x-3 pl-4 border-l border-slate-800">
-              <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-300">
+            <div className="flex items-center gap-2.5 border-l border-slate-800 pl-4">
+              <div className="h-8 w-8 rounded-full bg-blue-600/30 border border-blue-500/50 flex items-center justify-center font-semibold text-blue-400 text-xs">
                 A
               </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-200">Inspector</p>
+              <div className="text-right">
+                <p className="text-xs font-semibold text-slate-200 leading-tight">Inspector</p>
                 <p className="text-[10px] text-slate-400">Delhi Cyber Cell</p>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Dashboard Main View */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Header & Quick Action Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Content Body */}
+        <main className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#070c14]">
+          {/* Page Banner & Severity Control */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0d1726] p-5 rounded-xl border border-slate-800">
             <div>
-              <div className="flex items-center space-x-3">
-                <h2 className="text-2xl font-bold text-white tracking-tight">Real-Time Threat Alerts</h2>
-                <span className="bg-rose-500/10 text-rose-400 text-xs px-2.5 py-0.5 rounded-full border border-rose-500/30 font-semibold flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                  <span>LIVE MONITORING</span>
+              <h2 className="text-xl font-bold text-white tracking-wide">Alerts Feed</h2>
+              <p className="text-xs text-slate-400 mt-1">Real-time proactive cyber-fraud signals & risk indicators</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label htmlFor="severity-filter" className="text-xs font-medium text-slate-400">
+                Severity:
+              </label>
+              <select
+                id="severity-filter"
+                value={selectedSeverity}
+                onChange={(e) => setSelectedSeverity(e.target.value)}
+                className="bg-[#09111e] border border-slate-700 text-xs text-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500"
+              >
+                <option value="ALL">All Severities</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Active Alerts Feed */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-300">Active Signals ({activeAlerts.length})</h3>
+
+            {activeAlerts.length === 0 ? (
+              <div className="p-8 text-center bg-[#0d1726] rounded-xl border border-slate-800 text-slate-500 text-xs">
+                No active alerts matching the selected filters.
+              </div>
+            ) : (
+              activeAlerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className="bg-[#0d1726] rounded-xl border border-slate-800/80 p-4 hover:border-slate-700 transition-colors space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 pb-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <SeverityChip severity={alert.severity} />
+                      <span className="font-mono text-xs font-bold text-blue-400">{alert.caseRef}</span>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-xs text-slate-400 font-medium">{alert.typology}</span>
+                    </div>
+                    <span className="text-[11px] text-slate-500">{formatDate(alert.timestamp)}</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+                    <div className="md:col-span-3">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Reason</p>
+                      <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{alert.reason}</p>
+                    </div>
+                    <div className="md:col-span-1 bg-[#09111e] p-2.5 rounded-lg border border-slate-800 md:text-right">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Amount at Risk</p>
+                      <p className="text-sm font-bold text-slate-100 mt-0.5">{formatCurrency(alert.amountAtRisk)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Collapsible Suppressed Alerts */}
+          <div className="border border-slate-800 rounded-xl bg-[#0a1220] overflow-hidden">
+            <button
+              onClick={() => setIsSuppressedOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between p-3.5 bg-[#0d1726] hover:bg-slate-800/40 transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-300 text-xs">Suppressed Alerts</span>
+                <span className="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded-full font-medium">
+                  {suppressedAlerts.length}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Automated threat detection feeds and incident lifecycle management panel.
-              </p>
-            </div>
+              <span className="text-slate-500 text-xs">{isSuppressedOpen ? 'Hide ▲' : 'Show ▼'}</span>
+            </button>
 
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => {
-                  const unacknowledged = alerts.map(a => a.status === 'Active' ? { ...a, status: 'Acknowledged' } : a);
-                  setAlerts(unacknowledged);
-                }}
-                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all"
-              >
-                <Check className="w-3.5 h-3.5 text-amber-400" />
-                <span>Acknowledge All Unhandled</span>
-              </button>
-              <button className="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-lg shadow-blue-950/30 transition-all">
-                <Zap className="w-3.5 h-3.5" />
-                <span>Trigger Rule Re-Scan</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: 'Critical Threats', count: alerts.filter(a => a.severity === 'Critical').length, color: 'text-rose-400', border: 'border-rose-500/20' },
-              { label: 'Active Unhandled', count: alerts.filter(a => a.status === 'Active').length, color: 'text-amber-400', border: 'border-amber-500/20' },
-              { label: 'Under Investigation', count: alerts.filter(a => a.status === 'Acknowledged').length, color: 'text-blue-400', border: 'border-blue-500/20' },
-              { label: 'Resolved Today', count: alerts.filter(a => a.status === 'Resolved').length, color: 'text-emerald-400', border: 'border-emerald-500/20' },
-            ].map((stat, i) => (
-              <div key={i} className={`bg-[#0B0F19] border ${stat.border} rounded-xl p-3.5 flex items-center justify-between`}>
-                <span className="text-xs text-slate-400">{stat.label}</span>
-                <span className={`text-xl font-bold ${stat.color}`}>{stat.count}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Search and Filters Strip */}
-          <div className="bg-[#0B0F19] border border-slate-800/80 rounded-xl p-3.5 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-              {/* Search Bar */}
-              <div className="md:col-span-5 relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter by Alert Title, ID, or Entity Name..."
-                  className="w-full bg-[#070A11] border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Severity Dropdown */}
-              <div className="md:col-span-2 relative">
-                <select
-                  value={severityFilter}
-                  onChange={(e) => setSeverityFilter(e.target.value)}
-                  className="w-full bg-[#070A11] border border-slate-800 text-xs text-slate-300 rounded-lg px-3 py-1.5 appearance-none pr-8 focus:outline-none focus:border-blue-500 cursor-pointer"
-                >
-                  <option value="All">All Severities</option>
-                  <option value="Critical">Critical</option>
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-
-              {/* Category Dropdown */}
-              <div className="md:col-span-3 relative">
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="w-full bg-[#070A11] border border-slate-800 text-xs text-slate-300 rounded-lg px-3 py-1.5 appearance-none pr-8 focus:outline-none focus:border-blue-500 cursor-pointer"
-                >
-                  <option value="All">All Threat Categories</option>
-                  <option value="Transaction Anomaly">Transaction Anomaly</option>
-                  <option value="Phishing Intelligence">Phishing Intelligence</option>
-                  <option value="Identity Hijack">Identity Hijack</option>
-                  <option value="Authentication">Authentication</option>
-                  <option value="Location Intelligence">Location Intelligence</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-
-              {/* Status Dropdown */}
-              <div className="md:col-span-2 relative">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full bg-[#070A11] border border-slate-800 text-xs text-slate-300 rounded-lg px-3 py-1.5 appearance-none pr-8 focus:outline-none focus:border-blue-500 cursor-pointer"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Acknowledged">Acknowledged</option>
-                  <option value="Resolved">Resolved</option>
-                  <option value="Dismissed">Dismissed</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          {/* Master-Detail Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column: Live Alert Feed List */}
-            <div className="lg:col-span-6 space-y-3">
-              <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                <span>Real-Time Alert Feed ({filteredAlerts.length})</span>
-                <span className="text-[10px] text-slate-500">Auto-refreshing every 5s</span>
-              </div>
-
-              <div className="space-y-2.5 max-h-[640px] overflow-y-auto pr-1">
-                {filteredAlerts.length > 0 ? (
-                  filteredAlerts.map((alt) => (
-                    <div
-                      key={alt.id}
-                      onClick={() => setSelectedAlert(alt)}
-                      className={`bg-[#0B0F19] border rounded-xl p-4 cursor-pointer transition-all space-y-3 relative ${
-                        selectedAlert.id === alt.id
-                          ? 'border-blue-500/80 ring-1 ring-blue-500/40 bg-slate-800/20 shadow-lg'
-                          : 'border-slate-800/80 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-mono text-[10px] text-blue-400 font-semibold">{alt.id}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded border ${getSeverityBadge(alt.severity)}`}>
-                              {alt.severity}
-                            </span>
-                          </div>
-                          <h4 className="font-semibold text-white text-xs truncate">{alt.title}</h4>
+            {isSuppressedOpen && (
+              <div className="p-3.5 border-t border-slate-800 space-y-3 bg-[#070c14]">
+                {suppressedAlerts.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-2">No suppressed alerts for this filter.</p>
+                ) : (
+                  suppressedAlerts.map((alert) => (
+                    <div key={alert.id} className="bg-[#0d1726] p-3.5 rounded-lg border border-slate-800/80 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <SeverityChip severity={alert.severity} />
+                          <span className="font-mono text-xs text-slate-300">{alert.caseRef}</span>
+                          <span className="text-xs text-slate-500">({alert.typology})</span>
                         </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded border shrink-0 ${getStatusBadge(alt.status)}`}>
-                          {alt.status}
-                        </span>
+                        <span className="text-[10px] text-slate-500">{formatDate(alert.timestamp)}</span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 bg-[#070A11] p-2.5 rounded-lg border border-slate-800/80">
-                        <div>Target: <span className="text-slate-200 font-medium truncate block">{alt.entityName}</span></div>
-                        <div>Category: <span className="text-slate-200 font-medium truncate block">{alt.category}</span></div>
-                      </div>
+                      <p className="text-xs text-slate-400 whitespace-pre-wrap">{alert.reason}</p>
 
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                        <span className="flex items-center space-x-1">
-                          <Clock className="w-3 h-3 text-slate-500" />
-                          <span>{alt.timestamp}</span>
-                        </span>
-                        <span>Source: {alt.source}</span>
+                      <div className="bg-amber-950/30 border border-amber-800/40 p-2 rounded text-[11px]">
+                        <span className="font-semibold text-amber-400">Suppression Reason: </span>
+                        <span className="text-amber-200/80">{alert.suppressionReason}</span>
                       </div>
                     </div>
                   ))
-                ) : (
-                  <div className="bg-[#0B0F19] border border-slate-800/80 rounded-xl p-8 text-center text-slate-500 text-xs">
-                    No threat alerts matching active filter parameters.
-                  </div>
                 )}
               </div>
-            </div>
-
-            {/* Right Column: Detailed Lifecycle Panel */}
-            <div className="lg:col-span-6 bg-[#0B0F19] border border-slate-800/80 rounded-xl p-5 space-y-5 flex flex-col justify-between h-[680px]">
-              {selectedAlert ? (
-                <>
-                  <div className="space-y-5 overflow-y-auto pr-1">
-                    {/* Header Detail */}
-                    <div className="border-b border-slate-800 pb-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-mono text-xs text-blue-400 font-bold">{selectedAlert.id}</span>
-                          <span className={`text-xs px-2.5 py-0.5 rounded border ${getSeverityBadge(selectedAlert.severity)}`}>
-                            {selectedAlert.severity} Severity
-                          </span>
-                        </div>
-                        <span className="text-xs text-slate-400">{selectedAlert.fullTime}</span>
-                      </div>
-                      <h3 className="text-lg font-bold text-white leading-tight">{selectedAlert.title}</h3>
-                      <p className="text-xs text-slate-400">Triggered by <strong className="text-slate-300">{selectedAlert.source}</strong></p>
-                    </div>
-
-                    {/* Metadata Grid */}
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="bg-[#070A11] p-3 rounded-lg border border-slate-800 space-y-0.5">
-                        <span className="text-slate-500 text-[10px]">Target Entity / Name</span>
-                        <p className="font-semibold text-slate-200">{selectedAlert.entityName}</p>
-                      </div>
-                      <div className="bg-[#070A11] p-3 rounded-lg border border-slate-800 space-y-0.5">
-                        <span className="text-slate-500 text-[10px]">Associated Account</span>
-                        <p className="font-semibold text-blue-400 font-mono">{selectedAlert.account}</p>
-                      </div>
-                      <div className="bg-[#070A11] p-3 rounded-lg border border-slate-800 space-y-0.5">
-                        <span className="text-slate-500 text-[10px]">Exposed Amount / Risk</span>
-                        <p className="font-semibold text-rose-400">{selectedAlert.amount}</p>
-                      </div>
-                      <div className="bg-[#070A11] p-3 rounded-lg border border-slate-800 space-y-0.5">
-                        <span className="text-slate-500 text-[10px]">Location & IP Vector</span>
-                        <p className="font-semibold text-slate-200 truncate">{selectedAlert.location} ({selectedAlert.ipAddress})</p>
-                      </div>
-                    </div>
-
-                    {/* Threat Narrative */}
-                    <div className="space-y-1.5">
-                      <h4 className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
-                        <Terminal className="w-3.5 h-3.5 text-blue-400" />
-                        <span>Incident Narrative</span>
-                      </h4>
-                      <p className="text-xs text-slate-300 bg-[#070A11] p-3.5 rounded-lg border border-slate-800 leading-relaxed">
-                        {selectedAlert.description}
-                      </p>
-                    </div>
-
-                    {/* Recommended Playbook Actions */}
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
-                        <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Automated Response Playbook</span>
-                      </h4>
-                      <div className="space-y-1.5">
-                        {selectedAlert.recommendedActions.map((action, idx) => (
-                          <div key={idx} className="flex items-center justify-between bg-[#070A11] p-2.5 rounded-lg border border-slate-800 text-xs">
-                            <span className="text-slate-300">{action}</span>
-                            <button className="text-[10px] bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded transition-colors font-medium">
-                              Execute
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Lifecycle Action Footer */}
-                  <div className="pt-4 border-t border-slate-800 space-y-2">
-                    <span className="text-[10px] text-slate-500 block">Incident Lifecycle State Control</span>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <button
-                        onClick={() => handleUpdateStatus(selectedAlert.id, 'Acknowledged')}
-                        className={`py-2 rounded-lg font-semibold border flex items-center justify-center space-x-1 transition-all ${
-                          selectedAlert.status === 'Acknowledged'
-                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Acknowledge</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleUpdateStatus(selectedAlert.id, 'Resolved')}
-                        className={`py-2 rounded-lg font-semibold border flex items-center justify-center space-x-1 transition-all ${
-                          selectedAlert.status === 'Resolved'
-                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Mark Resolved</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleUpdateStatus(selectedAlert.id, 'Dismissed')}
-                        className={`py-2 rounded-lg font-semibold border flex items-center justify-center space-x-1 transition-all ${
-                          selectedAlert.status === 'Dismissed'
-                            ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
-                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
-                      >
-                        <Ban className="w-3.5 h-3.5" />
-                        <span>Dismiss False +</span>
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-slate-500 text-xs">
-                  <AlertCircle className="w-8 h-8 mb-2 stroke-1" />
-                  <span>Select an alert from the real-time feed to inspect lifecycle actions.</span>
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );
