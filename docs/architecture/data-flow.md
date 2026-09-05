@@ -61,7 +61,7 @@ sequenceDiagram
     Pred-->>Aud: prediction logged with model_version
 
     Pred->>Alr: candidates + evidence_sufficiency
-    Alr->>Alr: threshold + network case grouping (§1.9)
+    Alr->>Alr: threshold + network case grouping (§27.1)
     Alr-->>Aud: alert raised
     Alr->>Case: case opened / merged into grouping
     Case-->>Aud: case lifecycle events
