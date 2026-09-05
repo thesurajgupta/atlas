@@ -1,0 +1,16 @@
+{
+  "seed": 26184,
+  "files": {
+    "complaints": 10000,
+    "transactions": 50000,
+    "entities": 12000,
+    "endpoints": 1500,
+    "ground_truth_hidden": 10000,
+    "predictions": 50000,
+    "alerts": 10000,
+    "interventions_feedback": 10000,
+    "jurisdictions": 37,
+    "grouping_proposals": 500
+  },
+  "ground_truth_policy": "evaluation-only; hidden from prediction path"
+}

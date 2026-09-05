@@ -1,0 +1,38 @@
+jurisdiction_id,state,district,level
+JUR-001,Uttar Pradesh,Gautam Buddha Nagar,STATE
+JUR-002,Uttar Pradesh,Lucknow,STATE
+JUR-003,Uttar Pradesh,Varanasi,STATE
+JUR-004,Uttar Pradesh,Jaunpur,STATE
+JUR-005,Uttar Pradesh,Kanpur Nagar,DISTRICT
+JUR-006,Delhi,New Delhi,DISTRICT
+JUR-007,Delhi,North East Delhi,STATE
+JUR-008,Delhi,South East Delhi,STATE
+JUR-009,Delhi,West Delhi,STATE
+JUR-010,Maharashtra,Mumbai,DISTRICT
+JUR-011,Maharashtra,Pune,STATE
+JUR-012,Maharashtra,Nagpur,DISTRICT
+JUR-013,Maharashtra,Nashik,DISTRICT
+JUR-014,Maharashtra,Thane,STATE
+JUR-015,Bihar,Patna,DISTRICT
+JUR-016,Bihar,Gaya,STATE
+JUR-017,Bihar,Muzaffarpur,STATE
+JUR-018,Bihar,Bhagalpur,STATE
+JUR-019,West Bengal,Kolkata,STATE
+JUR-020,West Bengal,Howrah,STATE
+JUR-021,West Bengal,North 24 Parganas,STATE
+JUR-022,Rajasthan,Jaipur,STATE
+JUR-023,Rajasthan,Jodhpur,STATE
+JUR-024,Rajasthan,Kota,DISTRICT
+JUR-025,Rajasthan,Udaipur,STATE
+JUR-026,Madhya Pradesh,Bhopal,STATE
+JUR-027,Madhya Pradesh,Indore,STATE
+JUR-028,Madhya Pradesh,Jabalpur,DISTRICT
+JUR-029,Karnataka,Bengaluru Urban,STATE
+JUR-030,Karnataka,Mysuru,STATE
+JUR-031,Karnataka,Mangaluru,DISTRICT
+JUR-032,Tamil Nadu,Chennai,STATE
+JUR-033,Tamil Nadu,Coimbatore,DISTRICT
+JUR-034,Tamil Nadu,Madurai,STATE
+JUR-035,Telangana,Hyderabad,DISTRICT
+JUR-036,Telangana,Warangal,DISTRICT
+JUR-037,Telangana,Nizamabad,STATE
