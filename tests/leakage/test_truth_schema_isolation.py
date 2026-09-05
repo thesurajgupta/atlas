@@ -78,3 +78,50 @@ async def test_gate_would_fail_if_grant_were_added(session: AsyncSession) -> Non
         text("SELECT has_schema_privilege('atlas_app', 'truth', 'USAGE')")
     )
     assert after.scalar() is False, "rollback failed; test left the database modified"
+
+
+# --------------------------------------------------------------------------
+# The ground-truth tables themselves (spec §23.2)
+# --------------------------------------------------------------------------
+
+#: Written by `python -m simulator`. `cash_out_event` is the answer every tier
+#: is scored against; a feature derived from it produces a model that appears
+#: to work perfectly and predicts nothing.
+TRUTH_TABLES = ("scenario", "layering_hop", "cash_out_event")
+
+
+@pytest.mark.parametrize("role", SERVING_ROLES)
+@pytest.mark.parametrize("table", TRUTH_TABLES)
+async def test_serving_roles_cannot_read_the_answer_key(
+    session: AsyncSession, role: str, table: str
+) -> None:
+    """Schema-level USAGE is already revoked, which is what actually stops this.
+
+    Asserting at table level as well is deliberate belt-and-braces: a future
+    migration that grants USAGE on `truth` for some administrative reason would
+    re-open every table at once, and the schema-level test alone would be the
+    only thing standing in the way.
+    """
+    result = await session.execute(
+        text("SELECT has_table_privilege(:role, :table, 'SELECT')"),
+        {"role": role, "table": f"truth.{table}"},
+    )
+    assert result.scalar() is False, (
+        f"{role} can read truth.{table}. The serving path can reach ground "
+        f"truth, and every metric this project reports becomes meaningless."
+    )
+
+
+async def test_the_simulator_role_can_write_the_answer_key(
+    session: AsyncSession,
+) -> None:
+    """The assertions above are only meaningful if someone *can* reach it.
+
+    A `truth` schema nobody could write would pass every isolation test in this
+    file while making the simulator useless — the same reason the audit-grant
+    tests needed a positive case before they meant anything.
+    """
+    result = await session.execute(
+        text("SELECT has_schema_privilege('atlas_sim', 'truth', 'USAGE')")
+    )
+    assert result.scalar() is True

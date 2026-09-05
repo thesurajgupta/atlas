@@ -29,7 +29,9 @@ def main() -> int:
         return 1
 
     text = SPEC.read_text(encoding="utf-8")
-    sections = {int(m.group(1)) for m in re.finditer(r"^## (\d+)\.", text, re.MULTILINE)}
+    sections = {
+        int(m.group(1)) for m in re.finditer(r"^## (\d+)\.", text, re.MULTILINE)
+    }
     subsections = {
         (int(m.group(1)), int(m.group(2)))
         for m in re.finditer(r"^### (\d+)\.(\d+)", text, re.MULTILINE)
