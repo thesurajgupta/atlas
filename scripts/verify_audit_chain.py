@@ -17,11 +17,14 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "apps" / "api"))
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
-
-from atlas.audit import checkpoints  # noqa: E402
-from atlas.audit.service import count_events, verify_chain  # noqa: E402
-from atlas.core.config import get_settings  # noqa: E402
+from atlas.audit import checkpoints
+from atlas.audit.service import count_events, verify_chain
+from atlas.core.config import get_settings
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 async def _run() -> int:
@@ -58,7 +61,9 @@ async def _run() -> int:
                 print(f"  ✗ checkpoints: {exc}")
                 failures += 1
             else:
-                result = await checkpoints.verify_all_checkpoints(session, key.public_key)
+                result = await checkpoints.verify_all_checkpoints(
+                    session, key.public_key
+                )
                 if result.ok:
                     print(f"  ✓ checkpoints: {result.checkpoints_checked} verified")
                 else:

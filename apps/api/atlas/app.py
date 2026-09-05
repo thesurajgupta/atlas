@@ -12,7 +12,9 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from atlas.cases.router import router as cases_router
 from atlas.complaints.router import router as complaints_router
 from atlas.core.config import Environment, get_settings
 from atlas.core.database import dispose_engine
@@ -24,6 +26,7 @@ from atlas.core.middleware import (
     unhandled_error_handler,
 )
 from atlas.core.ratelimit import close_redis
+from atlas.geo.router import router as geo_router
 from atlas.iam.router import router as iam_router
 
 
@@ -83,6 +86,19 @@ def create_app() -> FastAPI:
     # Order matters: correlation id is added last so it runs first, and every
     # later middleware — including the rate limiter's rejection — has an id to
     # attach to its response.
+    # Mounted only when origins are actually configured. No wildcard, and
+    # `allow_credentials` means the browser refuses "*" anyway — a permissive
+    # default here would be a real hole on a tool that holds case data.
+    if settings.cors_allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_allowed_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "X-Correlation-Id"],
+            expose_headers=["X-Correlation-Id"],
+        )
+
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
 
@@ -91,6 +107,8 @@ def create_app() -> FastAPI:
 
     app.include_router(iam_router)
     app.include_router(complaints_router)
+    app.include_router(cases_router)
+    app.include_router(geo_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

@@ -48,7 +48,9 @@ def main() -> int:
     for path in POINTERS:
         rel = path.relative_to(REPO).as_posix()
         if not path.exists():
-            failures.append(f"    {rel} missing — that tool's users get no project rules")
+            failures.append(
+                f"    {rel} missing — that tool's users get no project rules"
+            )
             continue
         body = path.read_text(encoding="utf-8")
         digests[rel] = hashlib.sha256(body.encode()).hexdigest()
@@ -59,7 +61,9 @@ def main() -> int:
             failures.append(f"    {rel} does not point at CLAUDE.md")
 
     if len(set(digests.values())) > 1:
-        failures.append("    pointer files have drifted apart — regenerate them from one source")
+        failures.append(
+            "    pointer files have drifted apart — regenerate them from one source"
+        )
 
     if failures:
         print("  ✗ AI context check FAILED")

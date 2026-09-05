@@ -5,17 +5,17 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query, Request, status
+from sqlalchemy import func, select
 
 from atlas.audit.service import Actor, AuditRequest, record
 from atlas.complaints.models import Complaint
-from atlas.complaints.schemas import ComplaintCreate, ComplaintResponse
+from atlas.complaints.schemas import ComplaintCreate, ComplaintListResponse, ComplaintResponse
 from atlas.core import context
 from atlas.core.classification import Classification
 from atlas.core.clock import golden_hour_position, utc_now
 from atlas.core.errors import NotFoundError, ValidationError
-from atlas.iam.authz import Permission
+from atlas.iam.authz import Permission, jurisdiction_scope
 from atlas.iam.dependencies import SessionDep, authorize_resource, require
 from atlas.iam.models import Investigator
 
@@ -114,6 +114,43 @@ async def create_complaint(
         _audit_actor(request, investigator),
     )
     return _to_response(complaint)
+
+
+@router.get("", response_model=ComplaintListResponse)
+async def list_complaints(
+    request: Request,
+    session: SessionDep,
+    investigator: CanRead,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ComplaintListResponse:
+    """Complaints inside the caller's jurisdiction subtree, newest first.
+
+    The scope is applied in the query rather than by filtering results, so a
+    complaint outside it is never loaded, never counted and never logged.
+    """
+    scope = await jurisdiction_scope(session, investigator.jurisdiction_id)
+    base = select(Complaint).where(Complaint.victim_jurisdiction_id.in_(scope))
+
+    total = await session.scalar(select(func.count()).select_from(base.subquery()))
+    rows = await session.execute(
+        base.order_by(Complaint.reported_at.desc()).limit(limit).offset(offset)
+    )
+    complaints = list(rows.scalars())
+
+    await record(
+        session,
+        AuditRequest(
+            action="complaint.list",
+            resource_type="complaint",
+            resource_id="*",
+            result="allowed",
+            correlation_id=context.get_correlation_id(),
+            detail={"returned": len(complaints), "scope_size": len(scope)},
+        ),
+        _audit_actor(request, investigator),
+    )
+    return ComplaintListResponse(items=[_to_response(c) for c in complaints], total=total or 0)
 
 
 @router.get("/{complaint_id}", response_model=ComplaintResponse)

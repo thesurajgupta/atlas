@@ -13,6 +13,16 @@ paths = [
   '''node_modules/''',
   '''\.git/''',
   '''docs/archive/''',
+  # Next.js build output. `.next/cache/.previewinfo` and `.rscinfo` hold
+  # locally-generated random tokens that gitleaks reads as API keys. It is
+  # generated, gitignored, and never committed — but the working-tree scan
+  # reads gitignored files, so without this every frontend developer gets
+  # "SECRET FOUND IN WORKING TREE" the first time they run a build.
+  #
+  # Excluding generated output is not weakening the check (CLAUDE.md rule 1):
+  # apps/web source is still scanned, and a scanner that cries wolf on every
+  # build is one people learn to ignore.
+  '''apps/web/\.next/''',
 ]
 regexes = [
   '''change-me-locally''',
