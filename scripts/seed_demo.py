@@ -91,8 +91,20 @@ ENDPOINTS = [
 ]
 
 CASES = [
-    ("CASE-2026-0914", "Digital arrest — layered to AePS", CaseStatus.INVESTIGATING, "820000.00", 0),
-    ("CASE-2026-0915", "UPI collect fraud — single hop", CaseStatus.TRIAGED, "46000.00", 1),
+    (
+        "CASE-2026-0914",
+        "Digital arrest — layered to AePS",
+        CaseStatus.INVESTIGATING,
+        "820000.00",
+        0,
+    ),
+    (
+        "CASE-2026-0915",
+        "UPI collect fraud — single hop",
+        CaseStatus.TRIAGED,
+        "46000.00",
+        1,
+    ),
     ("CASE-2026-0916", "Customer-care impersonation", CaseStatus.NEW, "128000.00", 2),
 ]
 
@@ -196,12 +208,15 @@ async def main() -> int:
         endpoints_created = 0
         for ref, channel, operator, lat, lon in ENDPOINTS:
             exists = await session.execute(
-                text("SELECT 1 FROM geo.cash_out_endpoint WHERE public_ref = :r"), {"r": ref}
+                text("SELECT 1 FROM geo.cash_out_endpoint WHERE public_ref = :r"),
+                {"r": ref},
             )
             if exists.first():
                 continue
             geom = (
-                "ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)" if lat is not None else "NULL"
+                "ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)"
+                if lat is not None
+                else "NULL"
             )
             await session.execute(
                 text(
@@ -212,8 +227,12 @@ async def main() -> int:
                     " :j, :obs, 'seed_demo', :ref, 'SENSITIVE', true)"
                 ),
                 {
-                    "id": uuid.uuid4(), "ref": ref, "ch": channel.value, "op": operator,
-                    "j": district_id, "obs": now,
+                    "id": uuid.uuid4(),
+                    "ref": ref,
+                    "ch": channel.value,
+                    "op": operator,
+                    "j": district_id,
+                    "obs": now,
                     **({"lat": lat, "lon": lon} if lat is not None else {}),
                 },
             )
@@ -246,9 +265,14 @@ async def main() -> int:
                     "VALUES (:id, :ref, CAST(:st AS cases.case_status), :t, :op, :j, :a, :amt)"
                 ),
                 {
-                    "id": case_id, "ref": ref, "st": status.value, "t": title,
-                    "op": now - timedelta(hours=i + 1), "j": district_id,
-                    "a": investigator_id, "amt": Decimal(amount),
+                    "id": case_id,
+                    "ref": ref,
+                    "st": status.value,
+                    "t": title,
+                    "op": now - timedelta(hours=i + 1),
+                    "j": district_id,
+                    "a": investigator_id,
+                    "amt": Decimal(amount),
                 },
             )
             if complaint_index < len(complaint_ids):
@@ -259,8 +283,10 @@ async def main() -> int:
                         "VALUES (:id, :c, :cx, :j)"
                     ),
                     {
-                        "id": uuid.uuid4(), "c": case_id,
-                        "cx": complaint_ids[complaint_index], "j": district_id,
+                        "id": uuid.uuid4(),
+                        "c": case_id,
+                        "cx": complaint_ids[complaint_index],
+                        "j": district_id,
                     },
                 )
             cases_created += 1
@@ -269,16 +295,24 @@ async def main() -> int:
 
     await engine.dispose()
 
+    # Neither the password nor the TOTP secret is printed, and CodeQL was right
+    # to flag the version that did (py/clear-text-logging-sensitive-data). The
+    # password is a constant in this file, so echoing it added exposure and no
+    # information. The secret is generated per account and is the durable
+    # credential — printing it puts it in terminal scrollback, shell history
+    # files and any CI log that ever runs this.
+    #
+    # A live 6-digit code is enough to sign in and is worthless 30 seconds later,
+    # which is the whole point of TOTP.
     code = pyotp.TOTP(secret).now() if secret else "------"
     print("seeded.\n")
-    print(f"  username    {USERNAME}")
-    print(f"  password    {PASSWORD}")
-    print(f"  TOTP secret {secret}")
-    print(f"  code now    {code}   (30-second window)")
+    print(f"  username     {USERNAME}")
+    print("  password     see PASSWORD in scripts/seed_demo.py")
+    print(f"  code now     {code}   (valid ~30s — re-run for a fresh one)")
     print(f"  jurisdiction Delhi Cyber Cell ({district_id})")
-    print(f"  complaints  {created} new, {len(COMPLAINTS)} total")
-    print(f"  endpoints   {endpoints_created} new, {len(ENDPOINTS)} total")
-    print(f"  cases       {cases_created} new, {len(CASES)} total")
+    print(f"  complaints   {created} new, {len(COMPLAINTS)} total")
+    print(f"  endpoints    {endpoints_created} new, {len(ENDPOINTS)} total")
+    print(f"  cases        {cases_created} new, {len(CASES)} total")
     return 0
 
 
