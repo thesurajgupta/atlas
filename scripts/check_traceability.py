@@ -5,9 +5,9 @@ Master spec §49 criterion 21: every clause of the official problem statement mu
 map to a module and a passing test. A clause with no Test ID is a clause we have
 not delivered, regardless of how much code exists.
 """
+
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -47,7 +47,9 @@ def main() -> int:
         rows += 1
 
         if status not in VALID_STATUS:
-            failures.append(f"    line {lineno}: bad status {status!r} (expected one of {sorted(VALID_STATUS)})")
+            failures.append(
+                f"    line {lineno}: bad status {status!r} (expected one of {sorted(VALID_STATUS)})"
+            )
         else:
             status_counts[status] = status_counts.get(status, 0) + 1
 
@@ -58,7 +60,9 @@ def main() -> int:
             failures.append(f"    line {lineno}: clause {clause[:48]!r} has no module")
 
     if rows == 0:
-        failures.append("    no requirement rows parsed — matrix format may have changed")
+        failures.append(
+            "    no requirement rows parsed — matrix format may have changed"
+        )
 
     if failures:
         print("  ✗ traceability check FAILED")

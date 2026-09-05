@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "atlas-api",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": [
+        "atlas.app:app",
+        "--reload",
+        "--port",
+        "8000",
+        "--app-dir",
+        "apps/api"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "atlas-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "apps/web"
+      ],
+      "port": 3000
+    }
+  ]
+}

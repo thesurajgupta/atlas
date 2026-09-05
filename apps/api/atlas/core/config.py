@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=120, gt=0)
     break_glass_ttl_seconds: int = Field(default=3600, gt=0)
 
+    # Browser origins allowed to call the API. Empty by default, and it stays
+    # empty in production unless someone sets it deliberately — a wildcard here
+    # would let any page on the internet make credentialed calls on an
+    # investigator's behalf. Development sets it to the local web app in .env.
+    cors_allowed_origins: list[str] = Field(default_factory=list)
+
     notification_provider: str = "mock"
     allow_external_notifications: bool = False
 

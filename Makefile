@@ -125,9 +125,13 @@ simulate: ## Generate the synthetic dataset from the committed seed
 	@if [ -f simulator/__main__.py ]; then $(PY) -m simulator; \
 	 else echo "  ⏭  simulator: not implemented yet (phase 2)"; fi
 
-eval: ## Regenerate the evaluation report (deterministic, git-sha stamped)
-	@if [ -d ml/evaluation/harness ] && [ -n "$$(ls -A ml/evaluation/harness 2>/dev/null)" ]; then \
-	   $(PY) -m ml.evaluation.harness; \
+# Looked for a `ml/evaluation/harness` *directory* and so always reported
+# "not implemented" — the harness is a module. Fixed, and pointed at the real
+# thing rather than the stub `main()` in metrics.py, which scored hardcoded
+# demo inputs and would have produced a SHA-stamped report full of constants.
+eval: ## Regenerate the evaluation report (real data, git-sha stamped)
+	@if [ -f ml/evaluation/harness.py ]; then \
+	   PYTHONPATH=apps/api:. $(PY) -m ml.evaluation.harness; \
 	 else echo "  ⏭  eval: harness not implemented yet (phase 6)"; fi
 
 demo: ## Run the full end-to-end demo, offline and reproducible

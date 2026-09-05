@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import pathlib
 import sys
+
 import tomllib
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -67,10 +68,16 @@ def imported_modules() -> dict[str, set[str]]:
                 modules: list[str] = []
                 if isinstance(node, ast.Import):
                     modules = [a.name.split(".")[0] for a in node.names]
-                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                elif (
+                    isinstance(node, ast.ImportFrom) and node.level == 0 and node.module
+                ):
                     modules = [node.module.split(".")[0]]
                 for module in modules:
-                    if module in stdlib or module in LOCAL_PACKAGES or module.startswith("_"):
+                    if (
+                        module in stdlib
+                        or module in LOCAL_PACKAGES
+                        or module.startswith("_")
+                    ):
                         continue
                     found.setdefault(module, set()).add(str(path.relative_to(REPO)))
     return found
@@ -87,7 +94,7 @@ def main() -> int:
     if missing:
         print("  ✗ undeclared dependencies:")
         for module, files in sorted(missing.items()):
-            print(f"      {module}  — used in {sorted(files)[0]}")
+            print(f"      {module}  — used in {min(files)}")
         print("    Add them to apps/api/pyproject.toml.")
         return 1
 
