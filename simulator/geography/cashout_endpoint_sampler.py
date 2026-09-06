@@ -31,9 +31,9 @@ that ingestion will later read (§23.2). Do not import this into
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Sequence
 
 import h3  # h3-py
 
@@ -55,17 +55,36 @@ class CashOutEndpoint:
     lat: float | None
     lon: float | None
     h3_cell: str | None
-    fraud_linked_utilisation: float  # historical prior, 0..1 — NOT the same as "risk to a place" (§2)
+    fraud_linked_utilisation: (
+        float  # historical prior, 0..1 — NOT the same as "risk to a place" (§2)
+    )
 
 
 # Per-typology channel preference (§9 table). Weights are documented
 # assumptions (docs/ml/typology-assumptions.md), not measured facts.
 TYPOLOGY_CHANNEL_WEIGHTS: dict[str, dict[Channel, float]] = {
-    "digital_arrest": {Channel.ATM: 0.35, Channel.AEPS_BC: 0.25, Channel.BANK_BRANCH: 0.25, Channel.CRYPTO_P2P: 0.15},
-    "investment_scam": {Channel.BANK_BRANCH: 0.4, Channel.CRYPTO_P2P: 0.35, Channel.ATM: 0.25},
-    "upi_collect_qr": {Channel.MERCHANT_QR: 0.5, Channel.AEPS_BC: 0.35, Channel.POS_CASHBACK: 0.15},
+    "digital_arrest": {
+        Channel.ATM: 0.35,
+        Channel.AEPS_BC: 0.25,
+        Channel.BANK_BRANCH: 0.25,
+        Channel.CRYPTO_P2P: 0.15,
+    },
+    "investment_scam": {
+        Channel.BANK_BRANCH: 0.4,
+        Channel.CRYPTO_P2P: 0.35,
+        Channel.ATM: 0.25,
+    },
+    "upi_collect_qr": {
+        Channel.MERCHANT_QR: 0.5,
+        Channel.AEPS_BC: 0.35,
+        Channel.POS_CASHBACK: 0.15,
+    },
     "customer_care_impersonation": {Channel.ATM: 0.5, Channel.AEPS_BC: 0.5},
-    "loan_app_extortion": {Channel.MERCHANT_QR: 0.5, Channel.AEPS_BC: 0.3, Channel.POS_CASHBACK: 0.2},
+    "loan_app_extortion": {
+        Channel.MERCHANT_QR: 0.5,
+        Channel.AEPS_BC: 0.3,
+        Channel.POS_CASHBACK: 0.2,
+    },
     "job_task_fraud": {Channel.AEPS_BC: 0.6, Channel.BANK_BRANCH: 0.4},
     "sextortion": {Channel.MERCHANT_QR: 0.6, Channel.AEPS_BC: 0.4},
 }
@@ -92,9 +111,17 @@ def sample_cashout_endpoint(
         if ep.h3_cell is None:  # CRYPTO_P2P — logical, treat as ring 0
             return 0
         try:
-            return h3.grid_distance(mule_home_h3_cell, ep.h3_cell)
-        except Exception:
-            return max_ring + 1  # unreachable / different resolution -> heavily penalised
+            # `h3-py` ships no type information, so the result is `Any` and the
+            # int is asserted here rather than leaking untyped into the score.
+            distance: int = h3.grid_distance(mule_home_h3_cell, ep.h3_cell)
+            return distance
+        except (h3.H3BaseException, ValueError):
+            # Two real cases, and both mean the same thing here: the cells are
+            # at different resolutions, or one of them is not a valid index.
+            # Narrowed from a bare `except Exception`, which would also have
+            # swallowed a TypeError from passing the wrong shape entirely — a
+            # bug that should surface rather than become "very far away".
+            return max_ring + 1  # unreachable -> heavily penalised
 
     scored = []
     for ep in candidate_endpoints:
@@ -104,12 +131,16 @@ def sample_cashout_endpoint(
         dist = ring_distance(ep)
         if dist > max_ring:
             continue
-        distance_decay = 1.0 / (1 + dist)  # not a hard cutoff — long cash-outs do happen
+        distance_decay = 1.0 / (
+            1 + dist
+        )  # not a hard cutoff — long cash-outs do happen
         # small additive noise (not multiplicative) so density doesn't fully
         # determine the outcome — keeps the true endpoint inside the
         # candidate set without making it trivially identifiable
         noise = rng.uniform(0.85, 1.15)
-        weight = chan_w * distance_decay * (0.3 + 0.7 * ep.fraud_linked_utilisation) * noise
+        weight = (
+            chan_w * distance_decay * (0.3 + 0.7 * ep.fraud_linked_utilisation) * noise
+        )
         scored.append((ep, weight))
 
     if not scored:
@@ -118,5 +149,6 @@ def sample_cashout_endpoint(
             f"of {mule_home_h3_cell!r} — widen max_ring or check endpoint registry seeding."
         )
 
-    endpoints, weights = zip(*scored)
-    return rng.choices(endpoints, weights=weights, k=1)[0]
+    endpoints, weights = zip(*scored, strict=True)
+    chosen: CashOutEndpoint = rng.choices(endpoints, weights=weights, k=1)[0]
+    return chosen

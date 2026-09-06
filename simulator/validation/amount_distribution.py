@@ -30,6 +30,7 @@ from __future__ import annotations
 import math
 import random
 from collections import Counter
+from typing import TypedDict
 
 BENFORD_EXPECTED = {d: math.log10(1 + 1 / d) for d in range(1, 10)}
 
@@ -79,7 +80,23 @@ def generate_amount(
     min_amt, max_amt = TYPOLOGY_AMOUNT_RANGE[typology]
     log_min, log_max = math.log10(min_amt), math.log10(max_amt)
     log_val = rng.uniform(log_min, log_max)
-    return round(10 ** log_val, 2)
+    return round(10**log_val, 2)
+
+
+class BenfordResult(TypedDict):
+    """What the gate reports.
+
+    A named shape rather than a bare ``dict``: this is the return value the
+    §23.3 gate is read from, and a caller that misspells a key should fail type
+    checking rather than at the point where the number is quoted.
+    """
+
+    n: int
+    mad: float
+    conformity: str
+    passed: bool
+    observed_frequencies: dict[int, float]
+    expected_frequencies: dict[int, float]
 
 
 def leading_digit(amount: float) -> int:
@@ -90,7 +107,7 @@ def leading_digit(amount: float) -> int:
     raise ValueError(f"Could not extract leading digit from {amount!r}")
 
 
-def benford_conformance_test(amounts: list[float]) -> dict:
+def benford_conformance_test(amounts: list[float]) -> BenfordResult:
     """
     The actual §23.3 gate.
 
@@ -150,30 +167,45 @@ if __name__ == "__main__":
     # gate should run (aggregate dataset, not one typology in isolation).
     rng = random.Random(42)
     typology_mix = {
-        "digital_arrest": 0.15, "investment_scam": 0.20, "upi_collect_qr": 0.25,
-        "customer_care_impersonation": 0.15, "loan_app_extortion": 0.10,
-        "job_task_fraud": 0.10, "sextortion": 0.05,
+        "digital_arrest": 0.15,
+        "investment_scam": 0.20,
+        "upi_collect_qr": 0.25,
+        "customer_care_impersonation": 0.15,
+        "loan_app_extortion": 0.10,
+        "job_task_fraud": 0.10,
+        "sextortion": 0.05,
     }
     structuring_by_typology = {
-        "digital_arrest": 0.02, "investment_scam": 0.01, "upi_collect_qr": 0.02,
-        "customer_care_impersonation": 0.02, "loan_app_extortion": 0.02,
-        "job_task_fraud": 0.01, "sextortion": 0.01,
+        "digital_arrest": 0.02,
+        "investment_scam": 0.01,
+        "upi_collect_qr": 0.02,
+        "customer_care_impersonation": 0.02,
+        "loan_app_extortion": 0.02,
+        "job_task_fraud": 0.01,
+        "sextortion": 0.01,
     }
     # Real reporting/KYC thresholds differ by rail and typology — do not
     # cluster every structured amount under the same ceiling, or structuring
     # itself becomes a Benford-breaking artefact concentrated on one digit.
     ceiling_by_typology = {
-        "digital_arrest": 200_000, "investment_scam": 200_000, "upi_collect_qr": 10_000,
-        "customer_care_impersonation": 50_000, "loan_app_extortion": 20_000,
-        "job_task_fraud": 90_000, "sextortion": 10_000,
+        "digital_arrest": 200_000,
+        "investment_scam": 200_000,
+        "upi_collect_qr": 10_000,
+        "customer_care_impersonation": 50_000,
+        "loan_app_extortion": 20_000,
+        "job_task_fraud": 90_000,
+        "sextortion": 10_000,
     }
     typologies, weights = zip(*typology_mix.items())
     sample = []
     for _ in range(100_000):
         t = rng.choices(typologies, weights=weights, k=1)[0]
-        sample.append(generate_amount(
-            t, rng,
-            structuring_fraction=structuring_by_typology[t],
-            structuring_ceiling=ceiling_by_typology[t],
-        ))
+        sample.append(
+            generate_amount(
+                t,
+                rng,
+                structuring_fraction=structuring_by_typology[t],
+                structuring_ceiling=ceiling_by_typology[t],
+            )
+        )
     print(benford_conformance_test(sample))

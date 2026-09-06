@@ -95,7 +95,12 @@ _NARRATIVE_TEMPLATES = {
 
 @dataclass(frozen=True)
 class GeneratedComplaint:
-    payload: dict  # exact shape SyntheticComplaintConnector.validate/normalize expects
+    #: Exact shape ``SyntheticComplaintConnector.validate/normalize`` expects.
+    #: Left as ``object`` values rather than a TypedDict because the connector
+    #: is the authority on the shape and duplicating it here would create a
+    #: second definition to keep in step. Every value is a string because that
+    #: is what the connector normalises from — amounts included.
+    payload: dict[str, str]
 
 
 def generate_complaint(
@@ -108,13 +113,17 @@ def generate_complaint(
     (there is no valid default; inventing one would just move the
     foreign-key failure from here to the database)."""
     if typology not in FRAUD_TYPOLOGIES:
-        raise ValueError(f"unknown typology {typology!r}; expected one of {FRAUD_TYPOLOGIES}")
+        raise ValueError(
+            f"unknown typology {typology!r}; expected one of {FRAUD_TYPOLOGIES}"
+        )
 
     now = now or datetime.now(timezone.utc)
     lo_min, hi_min = _REPORT_DELAY_MINUTES[typology]
     delay = timedelta(minutes=rng.uniform(lo_min, hi_min))
     fraud_initiated_at = now - delay
-    reported_at = now - timedelta(minutes=rng.uniform(0, 10))  # small additional reporting lag
+    reported_at = now - timedelta(
+        minutes=rng.uniform(0, 10)
+    )  # small additional reporting lag
 
     amount = generate_amount(_AMOUNT_KEY[typology], rng)
 
@@ -135,7 +144,7 @@ def generate_complaint_batch(
     rng: random.Random,
     typology_weights: dict[str, float] | None = None,
     now: datetime | None = None,
-) -> list[dict]:
+) -> list[dict[str, str]]:
     """`n` complaint-shaped payloads, typology-mixed. Same caveat as
     `generate_complaint`: caller must set `victim_jurisdiction_id` on each
     dict before handing them to `SyntheticComplaintConnector`."""
