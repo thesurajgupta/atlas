@@ -53,9 +53,25 @@ interface EvalReport {
 
 const REPORTS = path.join(process.cwd(), "..", "..", "reports", "eval");
 
+/**
+ * Reports are named `eval_<sha>_<unix seconds>.json`.
+ *
+ * Sorting the filenames lexically picks the highest *SHA*, not the newest run —
+ * `eval_fd689ea_…` sorts after `eval_b6fd8f9_…` however old it is. This page
+ * showed a stale report for exactly that reason. Ordering is on the trailing
+ * timestamp, with anything unparseable sorted last so a hand-named file cannot
+ * shadow a real run.
+ */
+function generatedAt(filename: string): number {
+  const stamp = Number(filename.replace(/\.json$/, "").split("_").at(-1));
+  return Number.isFinite(stamp) ? stamp : -1;
+}
+
 async function newestReport(): Promise<EvalReport | null> {
   try {
-    const files = (await readdir(REPORTS)).filter((f) => f.endsWith(".json")).sort();
+    const files = (await readdir(REPORTS))
+      .filter((f) => f.endsWith(".json"))
+      .sort((a, b) => generatedAt(a) - generatedAt(b));
     const latest = files.at(-1);
     if (!latest) return null;
     return JSON.parse(await readFile(path.join(REPORTS, latest), "utf8")) as EvalReport;
