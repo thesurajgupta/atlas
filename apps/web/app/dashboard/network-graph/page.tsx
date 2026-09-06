@@ -101,15 +101,23 @@ const CustomNode = ({ data }: NodeProps) => {
       </div>
 
       {/* Node Labels */}
-      <div className="mt-2 text-center bg-[#0B0F19]/90 border border-slate-800/80 rounded-lg px-2.5 py-1 backdrop-blur-sm shadow-md">
-        <p className="text-[11px] font-bold text-white leading-tight">{data.label}</p>
-        {data.sublabel && (
-          <p className="text-[9px] text-slate-400 leading-tight mt-0.5">{data.sublabel}</p>
-        )}
-        {data.amount && (
-          <p className="text-[10px] text-emerald-400 font-mono font-semibold mt-0.5">{data.amount}</p>
-        )}
-      </div>
+    <div className="mt-2 text-center bg-[#0B0F19]/90 border border-slate-800/80 rounded-lg px-2.5 py-1 backdrop-blur-sm shadow-md">
+  <p className="text-[11px] font-bold text-white leading-tight">
+    {String(data.label)}
+  </p>
+
+{data.sublabel != null && (
+  <p className="text-[9px] text-slate-400 leading-tight mt-0.5">
+    {String(data.sublabel)}
+  </p>
+)}
+
+{data.amount != null && (
+  <p className="text-[10px] text-emerald-400 font-mono font-semibold mt-0.5">
+    {String(data.amount)}
+  </p>
+)}
+</div>
     </div>
   );
 };

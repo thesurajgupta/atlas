@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
@@ -35,7 +35,7 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-=======
+
 # ATLAS — Investigator Console (`apps/web`)
 
 Frontend shell for the investigator UI (issue #7, spec §25). Runs entirely on
@@ -85,4 +85,4 @@ name or colour.
 - Money Trail, Graph, Evidence, and Audit tabs inside the work-item shell —
   stubbed or missing; Summary and Prediction & Why are real.
 - No live data — everything reads from `lib/mock-data.ts`.
->>>>>>> origin/main
+

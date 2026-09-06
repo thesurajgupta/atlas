@@ -1,37 +1,25 @@
-<<<<<<< HEAD
 @import "tailwindcss";
 
-body {
-  background-color: #0b0e14;
-  color: #e2e8f0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-}
-=======
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* §25.5: "Type is small and tabular; digits use tabular figures." Applied
-   globally rather than per-component so no number anywhere in the product
-   can drift out of alignment by accident. */
 html {
   font-variant-numeric: tabular-nums;
 }
 
 body {
-  background-color: #f6f7f6;
-  color: #14181c;
+  background-color: #0b0e14;
+  color: #e2e8f0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
-/* Visible keyboard focus everywhere, no exceptions (quality floor, not a
-   decorative choice). */
-:focus-visible {
+*:focus-visible {
   outline: 2px solid #4a6fa5;
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -39,18 +27,6 @@ body {
   }
 }
 
-/* ===========================================================================
-   Money-trail console (app/money-trail).
-
-   Scoped additions for the trail explorer, kept here rather than in a second
-   stylesheet so there is one place a global rule can be found. Nothing below
-   overrides an upstream rule.
-   =========================================================================== */
-
-/* Typography scale for the console. Five tokens rather than ad-hoc pixel
-   values, so the hierarchy is stated once. Line-heights ship with the sizes:
-   raising a size without its leading makes dense text feel tighter, not
-   clearer. */
 :root {
   --font-micro: 10px;
   --font-ui-secondary: 12px;
@@ -85,11 +61,6 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* Invisible scrollbar for application chrome. Native scrolling is untouched —
-   wheel, trackpad, keyboard and touch all still work; only the painted bar is
-   suppressed, so a navigation rail reads as chrome rather than as a nested
-   page. Content regions an investigator reads down keep their scrollbars,
-   because there the bar is the affordance saying more rows exist. */
 .scrollbar-none {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -99,14 +70,12 @@ body {
   display: none;
 }
 
-/* Decorative sidebar network. The global prefers-reduced-motion rule above
-   already halts these; the guard here means they are never started in the
-   first place, and the mark is styled to look finished when static. */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes atlas-trail-flow {
     from {
       stroke-dashoffset: 0;
     }
+
     to {
       stroke-dashoffset: -16;
     }
@@ -118,6 +87,7 @@ body {
       opacity: 0.16;
       transform: scale(0.9);
     }
+
     50% {
       opacity: 0.5;
       transform: scale(1.25);
@@ -129,6 +99,7 @@ body {
     100% {
       opacity: 0.12;
     }
+
     60% {
       opacity: 0.42;
     }
@@ -139,8 +110,6 @@ body {
   }
 
   .atlas-pulse {
-    /* `transform-box: fill-box` is what makes `transform-origin: center` mean
-       the circle's own centre rather than the SVG viewport's. */
     transform-box: fill-box;
     transform-origin: center;
     animation: atlas-node-pulse 2.6s ease-in-out infinite;
@@ -151,4 +120,3 @@ body {
     animation-delay: 1.3s;
   }
 }
->>>>>>> origin/main

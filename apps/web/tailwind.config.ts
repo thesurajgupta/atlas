@@ -1,44 +1,28 @@
-<<<<<<< HEAD
-﻿import type { Config } from 'tailwindcss';
+import type { Config } from "tailwindcss";
 
 const config: Config = {
   content: [
-    './app/**/*.{js,ts,jsx,tsx,mdx}',
-    './components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/**/*.{js,ts,jsx,tsx,mdx}',
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
       colors: {
-        background: '#0b0e14',
-        surface: '#121721',
-        sidebar: '#0f141d',
-        card: '#161c26',
-=======
-import type { Config } from "tailwindcss";
+        background: "#0b0e14",
+        surface: "#121721",
+        sidebar: "#0f141d",
+        card: "#161c26",
 
-// Design tokens for the investigator interface (spec §25.5):
-// "Professional, information-dense, restrained, accessible, fast. Colour is
-// semantic and scarce — severity and risk only, never decoration."
-//
-// Palette is deliberately quiet: one neutral scale for structure, and a small
-// set of named severity/evidence colours that are the ONLY place colour
-// carries meaning. Nothing here is chosen for decoration.
-const config: Config = {
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
-  theme: {
-    extend: {
-      colors: {
-        paper: "#F6F7F6", // page background — cool, quiet, not warm-cream
-        surface: "#FFFFFF", // card / panel background
+        paper: "#F6F7F6",
         ink: {
-          900: "#14181C", // primary text
-          700: "#3A4249", // secondary text
-          500: "#5C6670", // tertiary / muted text
-          300: "#8B949C", // placeholder, disabled
+          900: "#14181C",
+          700: "#3A4249",
+          500: "#5C6670",
+          300: "#8B949C",
         },
         line: {
-          DEFAULT: "#DCE1E6", // hairline borders
+          DEFAULT: "#DCE1E6",
           strong: "#C2C9CF",
         },
         severity: {
@@ -54,6 +38,7 @@ const config: Config = {
           insufficient: "#5C6670",
         },
       },
+
       fontFamily: {
         sans: [
           "ui-sans-serif",
@@ -73,11 +58,11 @@ const config: Config = {
           "monospace",
         ],
       },
+
       fontSize: {
         xs: ["0.75rem", { lineHeight: "1.1rem" }],
         sm: ["0.8125rem", { lineHeight: "1.2rem" }],
         base: ["0.875rem", { lineHeight: "1.35rem" }],
->>>>>>> origin/main
       },
     },
   },

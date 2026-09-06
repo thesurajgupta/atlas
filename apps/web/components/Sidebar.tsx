@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, FilePlus, Briefcase, Search, GitFork, Network, 
   MapPin, Radio, AlertTriangle, FileText, Users, Settings 
@@ -10,8 +11,12 @@ const navItems = [
   { label: "Cases", icon: Briefcase, href: "/dashboard/cases" },
   { label: "Investigation", icon: Search, href: "/dashboard/investigation" },
   { label: "Transaction Trail", icon: GitFork, href: "/dashboard/transaction-trail" },
+   { label: "Audit ", icon: GitFork, href: "/dashboard/audit" },
+   { label: "Intelligence ", icon: FileText, href: "/dashboard/intelligence" },
+
   { label: "Network Graph", icon: Network, href: "/dashboard/network-graph" },
   { label: "ATM / Branch Map", icon: MapPin, href: "/dashboard/ATM-BranchMap",  },
+   { label: "Model Performance", icon: FileText, href: "/dashboard/ModelPerformance",  },
   { label: "Predicted Locations", icon: Radio, href: "/dashboard/predicted-locations" },
   { label: "Alerts", icon: AlertTriangle, href: "/dashboard/alerts", badge: "12" },
   { label: "Reports", icon: FileText, href: "/dashboard/reports" },
@@ -20,6 +25,7 @@ const navItems = [
 ];
 
 export default function Sidebar() {
+   const pathname = usePathname();
   return (
     <aside className="w-60 bg-[#0f141d] border-r border-slate-800/80 flex flex-col justify-between p-3 shrink-0">
       <div>
@@ -40,12 +46,11 @@ export default function Sidebar() {
               <a
                 key={item.label}
                 href={item.href}
-                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors ${
-                  item.active
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 font-semibold'
-                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
-                }`}
-              >
+             className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors ${
+  pathname === item.href
+    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 font-semibold'
+    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+}`}>
                 <div className="flex items-center gap-2.5">
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
