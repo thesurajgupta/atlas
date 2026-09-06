@@ -426,12 +426,10 @@ export default function MoneyTrailGraph({
     // `overflow-hidden` at the root is what guarantees the console never gains
     // a page-level scrollbar; every inner region that can overflow owns it.
     //
-    // Height is the viewport minus the shared nav (h-12), not `h-dvh`. The
-    // console used to own the whole viewport and carry its own NavigationRail;
-    // it now sits inside the `(dashboard)` group, and a full-height child under
-    // a 3rem nav is what produced the page-level scrollbar this class exists to
-    // prevent.
-    <div className="flex h-[calc(100dvh-3rem)] w-full overflow-hidden bg-slate-950 text-slate-200">
+    // `h-full`, not a viewport calculation. The shell gives `<main>` the height
+    // and owns the scroll, so this fills whatever it is given — no arithmetic
+    // against a nav whose height would then be duplicated in two files.
+    <div className="flex h-full w-full overflow-hidden bg-paper text-ink-700">
       <div className="flex min-w-0 flex-1 flex-col">
         <ConsoleHeader
           searchQuery={searchQuery}

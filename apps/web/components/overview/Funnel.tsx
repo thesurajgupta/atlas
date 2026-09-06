@@ -41,7 +41,7 @@ export function Funnel({ counts }: { counts: FunnelCounts }) {
               {i === 0 && <div className="mb-1 h-4 text-xs text-ink-500" />}
               <div className="flex h-16 w-full items-end justify-center">
                 <div
-                  className="w-full rounded-sm bg-ink-900/85"
+                  className="w-full rounded-sm border-t border-line-strong bg-raised"
                   style={{ height: `${widthPct}%` }}
                   aria-hidden
                 />

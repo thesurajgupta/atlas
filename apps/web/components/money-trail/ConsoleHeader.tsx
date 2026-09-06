@@ -21,7 +21,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import AtlasLogo from './AtlasLogo';
 import { usePopover } from './usePopover';
 
 const MONTHS = [
@@ -124,12 +123,6 @@ export default function ConsoleHeader({
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-slate-800 bg-slate-900 px-4">
-      {/* The full lockup lives in the rail; this shows only when the rail is hidden. */}
-      <div className="flex shrink-0 items-center gap-2 md:hidden">
-        <AtlasLogo size={26} />
-        <span className="text-ui-primary font-bold tracking-[0.2em] text-slate-50">ATLAS</span>
-      </div>
-
       <div className="relative mx-auto flex min-w-0 flex-1 items-center justify-center">
         <div className="relative w-full max-w-[650px] md:min-w-[320px]">
           <svg

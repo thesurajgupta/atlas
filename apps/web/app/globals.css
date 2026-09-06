@@ -10,14 +10,21 @@ html {
 }
 
 body {
-  background-color: #f6f7f6;
-  color: #14181c;
+  background-color: #0b0e14;
+  color: #f1f5f9;
+}
+
+/* Tells the browser this is a dark document, so form controls, scrollbars and
+   the flash before hydration all render dark rather than the page appearing
+   white for a frame and then inverting. */
+:root {
+  color-scheme: dark;
 }
 
 /* Visible keyboard focus everywhere, no exceptions (quality floor, not a
    decorative choice). */
 :focus-visible {
-  outline: 2px solid #4a6fa5;
+  outline: 2px solid #38bdf8;
   outline-offset: 2px;
 }
 

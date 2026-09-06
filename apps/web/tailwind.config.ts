@@ -4,37 +4,50 @@ import type { Config } from "tailwindcss";
 // "Professional, information-dense, restrained, accessible, fast. Colour is
 // semantic and scarce — severity and risk only, never decoration."
 //
-// Palette is deliberately quiet: one neutral scale for structure, and a small
-// set of named severity/evidence colours that are the ONLY place colour
-// carries meaning. Nothing here is chosen for decoration.
+// Dark by default. This is a console operators sit in front of for a shift, in
+// rooms that are not bright, alongside a map that is itself dark — a white page
+// between two dark surfaces is the thing people actually complain about.
+//
+// The neutral scale is blue-biased rather than pure grey, so it sits under the
+// accent without looking like an unconsidered default. Severity and evidence
+// are the only colours that carry meaning; everything else is structure.
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        paper: "#F6F7F6", // page background — cool, quiet, not warm-cream
-        surface: "#FFFFFF", // card / panel background
+        // Dark operations console. The tokens keep their semantic names, so
+        // every page that was written against `paper` / `surface` / `ink` /
+        // `line` retheme without touching a single component — which is the
+        // reason the palette was tokenised in the first place.
+        paper: "#0B0E14", // page background
+        surface: "#141A24", // card / panel
+        raised: "#1B2330", // controls, inputs, hovered rows
         ink: {
-          900: "#14181C", // primary text
-          700: "#3A4249", // secondary text
-          500: "#5C6670", // tertiary / muted text
-          300: "#8B949C", // placeholder, disabled
+          900: "#F1F5F9", // primary text
+          700: "#CBD5E1", // secondary
+          500: "#94A3B8", // tertiary / muted
+          300: "#64748B", // placeholder, disabled
         },
         line: {
-          DEFAULT: "#DCE1E6", // hairline borders
-          strong: "#C2C9CF",
+          DEFAULT: "#233044", // hairline borders
+          strong: "#334155",
         },
+        accent: "#38BDF8", // selection and focus only — never decoration
+        // Severity and evidence are the only colours that carry meaning
+        // (spec §25.5). Lifted off the light-theme values because #B3261E on
+        // #0B0E14 fails contrast — same semantics, legible ground.
         severity: {
-          low: "#3A4249",
-          medium: "#9A6700",
-          high: "#B3261E",
-          critical: "#7A1712",
+          low: "#94A3B8",
+          medium: "#FBBF24",
+          high: "#F87171",
+          critical: "#FB7185",
         },
         evidence: {
-          strong: "#1D6F5C",
-          moderate: "#4A6FA5",
-          weak: "#9A6700",
-          insufficient: "#5C6670",
+          strong: "#34D399",
+          moderate: "#60A5FA",
+          weak: "#FBBF24",
+          insufficient: "#94A3B8",
         },
       },
       fontFamily: {
