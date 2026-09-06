@@ -39,6 +39,7 @@ from ml.evaluation.metrics import (
     prediction_accuracy_index,
     recall_at_k,
 )
+from ml.evaluation.quotable import assess
 from ml.probe.run import (
     Case,
     diagnose_dataset,
@@ -174,15 +175,32 @@ async def build_report() -> dict[str, Any]:
         lambda c: conditional.get((c.victim_zone or "", c.typology), prior),
     )
 
+    distinct_times = len({c.fraud_initiated_at for c in cases})
+    # `realism_passed=False` is not a measurement — this harness has no way to
+    # run the Benford check, which lives in `simulator/validation` and scores the
+    # generator's own amounts. It fails closed rather than assuming: an
+    # unverified dataset must not be reported as a verified one, and #45 says
+    # this one does in fact fail.
+    verdict = assess(
+        has_data=True,
+        realism_passed=False,
+        has_signal=usable,
+        distinct_event_times=distinct_times,
+    )
+
     return {
         "provenance": _provenance(),
         "status": "OK" if usable else "DATASET_HAS_NO_SIGNAL",
+        "quotable": {
+            "verdict": verdict.quotable,
+            "blockers": list(verdict.blockers),
+        },
         "dataset": {
             "scenarios": len(cases),
             "candidate_zones": len(zones),
             "train": len(train),
             "test": len(test),
-            "distinct_fraud_timestamps": len({c.fraud_initiated_at for c in cases}),
+            "distinct_fraud_timestamps": distinct_times,
         },
         "baseline": baseline,
         "model": model,
@@ -231,6 +249,12 @@ def _print(report: dict[str, Any]) -> None:
     if report["status"] == "NO_DATA":
         print(f"  {report['detail']}")
         return
+
+    quotable = report.get("quotable", {})
+    if not quotable.get("verdict", False):
+        print("\n  ⛔ NOT QUOTABLE — nothing below may be published as a metric")
+        for blocker in quotable.get("blockers", []):
+            print(f"     · {blocker}")
 
     d = report["dataset"]
     print(

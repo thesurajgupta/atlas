@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -290,3 +291,58 @@ async def get_or_create_canonical(
     session.add(entity)
     await session.flush()
     return entity
+
+
+async def public_refs_for(
+    session: AsyncSession, *, entity_ids: Sequence[uuid.UUID], as_of: datetime
+) -> dict[uuid.UUID, str]:
+    """Map canonical entity ids to their business references, as of an instant.
+
+    Exists so callers above this module can cross from an entity id to whatever
+    the owning system calls the same thing, without reading
+    ``entity.canonical_entity`` themselves (ADR-009).
+
+    Bounded by ``observed_at <= as_of`` like every other read here: an entity
+    resolved last week was not available to a reconstruction of last month, and
+    silently including it would let a later merge change what an earlier
+    prediction could see (leakage gate 4, §19.3).
+    """
+    if as_of.tzinfo is None:
+        raise ValueError("as_of must be timezone-aware; naive datetimes are ambiguous")
+    if not entity_ids:
+        return {}
+
+    result = await session.execute(
+        select(CanonicalEntity.id, CanonicalEntity.public_ref).where(
+            CanonicalEntity.id.in_(list(entity_ids)),
+            CanonicalEntity.observed_at <= as_of,
+        )
+    )
+    return {row[0]: row[1] for row in result}
+
+
+async def entity_ids_for(
+    session: AsyncSession, *, public_refs: Sequence[str], as_of: datetime
+) -> dict[str, uuid.UUID]:
+    """Map business references to canonical entity ids, as of an instant.
+
+    The inverse of :func:`public_refs_for`, and needed for the same reason:
+    callers above this module cross between an owning system's reference and an
+    entity id without reading ``entity.canonical_entity`` themselves (ADR-009).
+
+    A reference with no canonical entity is absent rather than an error. An
+    endpoint that has never appeared in a transaction has no entity yet, which is
+    a normal state and not a data-quality problem.
+    """
+    if as_of.tzinfo is None:
+        raise ValueError("as_of must be timezone-aware; naive datetimes are ambiguous")
+    if not public_refs:
+        return {}
+
+    result = await session.execute(
+        select(CanonicalEntity.public_ref, CanonicalEntity.id).where(
+            CanonicalEntity.public_ref.in_(list(public_refs)),
+            CanonicalEntity.observed_at <= as_of,
+        )
+    )
+    return {row[0]: row[1] for row in result}

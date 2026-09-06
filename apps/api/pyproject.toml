@@ -106,9 +106,31 @@ strict = true
 warn_unreachable = true
 disallow_any_generics = true
 plugins = ["pydantic.mypy"]
+# Lets `follow_imports` below apply to stub files as well as source. Without it a
+# per-module `follow_imports = "skip"` is ignored for `.pyi`, and mypy parses the
+# stub anyway — which is the whole problem being solved for numpy.
+follow_imports_for_stubs = true
 
 [[tool.mypy.overrides]]
 module = ["h3.*", "shap.*", "lightgbm.*", "lifelines.*"]
+ignore_missing_imports = true
+
+# numpy's stubs use PEP 695 `type` statements, which mypy only parses when the
+# *target* version is 3.12 or later. This project targets 3.11 deliberately —
+# `requires-python` allows it, and that target is what catches 3.12-only syntax
+# in our own code. CI runs mypy under 3.12, so the stub is read by a 3.12
+# interpreter and rejected against a 3.11 target, failing before any of our code
+# is checked at all.
+#
+# Skipping the stub keeps the target honest. The alternative — retargeting mypy
+# to 3.12 — would silently stop catching syntax this project cannot yet use.
+#
+# numpy appears only inside two deferred imports in `atlas.predict.tier1`, where
+# LightGBM needs a dense array: it rejects a list of lists, because `lgb.Sequence`
+# is its own abstract class rather than `collections.abc.Sequence`.
+[[tool.mypy.overrides]]
+module = ["numpy.*"]
+follow_imports = "skip"
 ignore_missing_imports = true
 
 # pytest configuration lives in the repo-root pytest.ini (tests/ is not under apps/api)
