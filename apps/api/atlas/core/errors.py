@@ -62,6 +62,31 @@ class AuthorizationError(AtlasError):
     client_message = "The requested resource was not found."
 
 
+class ForbiddenError(AtlasError):
+    """Raised when a role may not use an endpoint at all. Returns **403**.
+
+    The counterpart to :class:`AuthorizationError`, and the difference is about
+    what the status code discloses rather than about severity.
+
+    ``AuthorizationError`` answers "may you see *this record*", and returns 404
+    because a 403 would confirm the record exists — enough to map case ids in
+    other jurisdictions by probing.
+
+    This one answers "may your role use *this endpoint*", where the endpoint's
+    existence is not a secret: it is published in the OpenAPI schema. Refusing
+    with 404 would tell an auditor whose role was misconfigured that the audit
+    API is missing, rather than that their permissions are wrong — a worse
+    answer that protects nothing.
+
+    Use it only for role-level refusals. Anything that depends on *which* row is
+    being read stays a 404.
+    """
+
+    status_code = 403
+    code = "forbidden"
+    client_message = "Your role does not permit this operation."
+
+
 class JurisdictionError(AuthorizationError):
     """Denied because the resource lies outside the actor's jurisdiction."""
 

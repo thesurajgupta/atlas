@@ -49,7 +49,7 @@ Status: `PLANNED` → `IN_PROGRESS` → `IMPLEMENTED` → `VERIFIED` (test green
 | Access intelligence reports | `atlas.intel`, `atlas.cases` | `E2E-CASE-001` | PLANNED |
 | Evidence documentation | `atlas.cases` evidence refs | `INT-EVID-001` | PLANNED |
 | *(implied)* Jurisdiction scoping | `atlas.iam` | `SEC-JURIS-001` | PLANNED |
-| *(implied)* Every action audited | `atlas.audit` | `INT-AUDIT-001` | PLANNED |
+| *(implied)* Every action audited | `atlas.audit`, `atlas.audit_api` | `INT-AUDIT-001` | IMPLEMENTED |
 
 ## Deliverable (d) — Alert & Notification System
 

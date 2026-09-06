@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from atlas.alerts.router import router as alerts_router
+from atlas.audit_api.router import router as audit_router
 from atlas.cases.router import router as cases_router
 from atlas.complaints.router import router as complaints_router
 from atlas.core.config import Environment, get_settings
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, unhandled_error_handler)
 
     app.include_router(iam_router)
+    app.include_router(audit_router)
     app.include_router(complaints_router)
     app.include_router(alerts_router)
     app.include_router(cases_router)

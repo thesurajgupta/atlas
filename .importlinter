@@ -17,6 +17,7 @@ name = Serving path must never import the simulator
 type = forbidden
 source_modules =
     atlas.app
+    atlas.audit_api
     atlas.features
     atlas.predict
     atlas.geo
@@ -44,6 +45,11 @@ name = ATLAS module layering
 type = layers
 layers =
     atlas.app
+    # The audit log's HTTP surface. Separate from `atlas.audit` and above
+    # `atlas.iam`, because reading the log requires authentication while
+    # writing to it must stay available to every module — including iam,
+    # which records logins. One module cannot be both above and below iam.
+    atlas.audit_api
     atlas.intel
     atlas.alerts
     atlas.cases
@@ -66,6 +72,7 @@ type = forbidden
 source_modules = atlas.core
 forbidden_modules =
     atlas.iam
+    atlas.audit_api
     atlas.ingest
     atlas.complaints
     atlas.entity
