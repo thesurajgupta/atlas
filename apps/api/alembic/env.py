@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Imported for their side effect of registering tables on Base.metadata.
+from atlas.alerts import models as alerts_models  # noqa: F401
 from atlas.audit import models as audit_models  # noqa: F401
 from atlas.cases import models as cases_models  # noqa: F401
 from atlas.complaints import models as complaints_models  # noqa: F401
