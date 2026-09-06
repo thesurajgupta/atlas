@@ -1,10 +1,12 @@
+import { redirect } from "next/navigation";
+
+/**
+ * `/graph` was a placeholder built before the money-trail console existed.
+ *
+ * Kept as a redirect rather than deleted: the route is linked from earlier
+ * issues and screenshots, and a 404 there reads as a broken build rather than
+ * a renamed page.
+ */
 export default function GraphPage() {
-  return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      <h1 className="mb-2 text-lg font-semibold text-ink-900">Graph</h1>
-      <p className="text-sm text-ink-500">
-        Not yet built. Tracked separately from the issue #7 core shell.
-      </p>
-    </div>
-  );
+  redirect("/money-trail");
 }

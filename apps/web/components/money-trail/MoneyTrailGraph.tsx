@@ -41,7 +41,6 @@ import ConsoleHeader from './ConsoleHeader';
 import EntityList from './EntityList';
 import EntityPanel from './EntityPanel';
 import EvidenceTable from './EvidenceTable';
-import NavigationRail from './NavigationRail';
 import { isoClock, isoDay, shortId } from './format';
 
 export interface MoneyTrailGraphProps {
@@ -426,9 +425,13 @@ export default function MoneyTrailGraph({
   return (
     // `overflow-hidden` at the root is what guarantees the console never gains
     // a page-level scrollbar; every inner region that can overflow owns it.
-    <div className="flex h-dvh w-full overflow-hidden bg-slate-950 text-slate-200">
-      <NavigationRail />
-
+    //
+    // Height is the viewport minus the shared nav (h-12), not `h-dvh`. The
+    // console used to own the whole viewport and carry its own NavigationRail;
+    // it now sits inside the `(dashboard)` group, and a full-height child under
+    // a 3rem nav is what produced the page-level scrollbar this class exists to
+    // prevent.
+    <div className="flex h-[calc(100dvh-3rem)] w-full overflow-hidden bg-slate-950 text-slate-200">
       <div className="flex min-w-0 flex-1 flex-col">
         <ConsoleHeader
           searchQuery={searchQuery}

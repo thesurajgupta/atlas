@@ -190,3 +190,76 @@ export const listComplaints = () =>
   request<Listed<ApiComplaint>>("/api/v1/complaints?limit=50");
 export const listEndpoints = () =>
   request<Listed<ApiEndpoint>>("/api/v1/geo/endpoints?limit=200");
+
+/* ----------------------------------------------------------------- alerts */
+
+export interface ApiAlert {
+  id: string;
+  case_ref: string;
+  jurisdiction_id: string;
+  /** Whether the policy raised this, or refused to. Both are rows. */
+  raised: boolean;
+  /** Null on a suppressed decision — a decision never sent has no severity. */
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | null;
+  /**
+   * The whole explanation, verbatim from `atlas/alerts/policy.py`. It carries a
+   * quantity and a window on a raised alert, and what rationed it on a
+   * suppressed one. It is the only place the amount, typology, evidence band
+   * and golden-hour position appear, so it is rendered in full and never
+   * summarised.
+   */
+  reason: string;
+  issued_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by_id: string | null;
+}
+
+export interface AlertList {
+  items: ApiAlert[];
+  total: number;
+  raised_total: number;
+  suppressed_total: number;
+}
+
+export const listAlerts = () => request<AlertList>("/api/v1/alerts?limit=100");
+
+/* ------------------------------------------------------------------ audit */
+
+export interface ApiAuditEvent {
+  id: string;
+  sequence: number;
+  occurred_at: string;
+  actor_id: string | null;
+  actor_role: string | null;
+  actor_jurisdiction: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  case_id: string | null;
+  result: "allowed" | "denied";
+  correlation_id: string;
+  source_ip: string | null;
+  user_agent: string | null;
+  detail: Record<string, unknown>;
+  previous_event_hash: string;
+  event_hash: string;
+}
+
+export interface ChainStatus {
+  verified: boolean;
+  events: number;
+  last_checkpoint_at: string | null;
+  first_bad_sequence: number | null;
+  reason: string | null;
+}
+
+export interface AuditList {
+  items: ApiAuditEvent[];
+  total: number;
+  chain: ChainStatus;
+}
+
+export const listAuditEvents = (result?: "allowed" | "denied") =>
+  request<AuditList>(
+    `/api/v1/audit?limit=100${result ? `&result=${result}` : ""}`,
+  );

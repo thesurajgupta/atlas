@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { label: "Alerts", href: "/alerts" },
   { label: "Cases", href: "/cases" },
   { label: "Map", href: "/map" },
-  { label: "Graph", href: "/graph" },
+  { label: "Money trail", href: "/money-trail" },
   { label: "Intelligence", href: "/intelligence" },
   { label: "Models", href: "/models" },
   { label: "Audit", href: "/audit" },

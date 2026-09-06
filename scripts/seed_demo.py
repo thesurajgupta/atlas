@@ -32,6 +32,9 @@ from atlas.core.enums import (
     JurisdictionLevel,
     Role,
 )
+from atlas.alerts.policy import AlertCandidate
+from atlas.alerts.service import evaluate_and_record
+from atlas.core.enums import EvidenceSufficiency
 from atlas.iam import mfa, passwords
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -39,6 +42,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 USERNAME = "demo.investigator"
 PASSWORD = "atlas-demo-password"
 DISPLAY_NAME = "Demo Investigator"
+AUDITOR_USERNAME = "demo.auditor"
+AUDITOR_DISPLAY_NAME = "Demo Auditor"
 
 COMPLAINTS = [
     (
@@ -109,6 +114,20 @@ CASES = [
 ]
 
 
+# Evidence bands are stated rather than computed: there is no trained model, so
+# a computed band would be a judgement dressed as a measurement. The mix is
+# deliberate — the three candidates exercise three different policy outcomes, so
+# the console has a raised alert, a golden-hour suppression and an evidence veto
+# to render. An operator who has never seen a suppressed row does not know the
+# system rations rather than fails.
+ALERT_CANDIDATES = [
+    # (case index, evidence, top candidate endpoint)
+    (0, EvidenceSufficiency.STRONG, "EP-0783"),
+    (1, EvidenceSufficiency.MODERATE, "EP-3341"),
+    (2, EvidenceSufficiency.INSUFFICIENT, None),
+]
+
+
 async def main() -> int:
     settings = get_settings()
     if settings.env is not Environment.DEVELOPMENT:
@@ -131,41 +150,26 @@ async def main() -> int:
             parent=state_id,
         )
 
-        # --- investigator ---
-        secret = mfa.generate_secret()
-        existing = await session.execute(
-            text("SELECT id, mfa_secret FROM iam.investigator WHERE username = :u"),
-            {"u": USERNAME},
+        # --- accounts ---
+        #
+        # Two, and the second is not a convenience. AUDIT_READ belongs to
+        # AUDITOR and SUPER_ADMIN only, so the investigator account cannot open
+        # the audit page at all. A single-account demo would either hide that
+        # page or tempt someone to widen the permission to show it.
+        investigator_id, secret = await _upsert_account(
+            session,
+            username=USERNAME,
+            display_name=DISPLAY_NAME,
+            role=Role.DISTRICT_INVESTIGATOR,
+            jurisdiction_id=district_id,
         )
-        row = existing.first()
-        if row is None:
-            investigator_id = uuid.uuid4()
-            await session.execute(
-                text(
-                    "INSERT INTO iam.investigator "
-                    "(id, username, display_name, password_hash, mfa_secret, mfa_enrolled, "
-                    " role, jurisdiction_id, is_active, failed_login_count) "
-                    "VALUES (:id, :u, :dn, :ph, :ms, true, CAST(:role AS iam.role), :j, true, 0)"
-                ),
-                {
-                    "id": investigator_id,
-                    "u": USERNAME,
-                    "dn": DISPLAY_NAME,
-                    "ph": passwords.hash_password(PASSWORD),
-                    "ms": secret,
-                    "role": Role.DISTRICT_INVESTIGATOR.value,
-                    "j": district_id,
-                },
-            )
-        else:
-            investigator_id, secret = row[0], row[1]
-            await session.execute(
-                text(
-                    "UPDATE iam.investigator SET password_hash = :ph, is_active = true, "
-                    "failed_login_count = 0, locked_until = NULL WHERE id = :id"
-                ),
-                {"ph": passwords.hash_password(PASSWORD), "id": investigator_id},
-            )
+        _auditor_id, auditor_secret = await _upsert_account(
+            session,
+            username=AUDITOR_USERNAME,
+            display_name=AUDITOR_DISPLAY_NAME,
+            role=Role.AUDITOR,
+            jurisdiction_id=state_id,
+        )
 
         # --- complaints ---
         now = datetime.now(UTC)
@@ -291,6 +295,39 @@ async def main() -> int:
                 )
             cases_created += 1
 
+        # --- alerts, from the real policy ---
+        #
+        # Run through `atlas.alerts.service.evaluate_and_record` rather than
+        # inserted directly, so what the console shows is what the policy
+        # actually decided — suppressions included. Seeding rows by hand would
+        # let the page display an alert the policy would have refused.
+        alerts_raised = alerts_suppressed = 0
+        existing_alerts = await session.scalar(
+            text("SELECT count(*) FROM alerts.alert WHERE jurisdiction_id = :j"),
+            {"j": district_id},
+        )
+        if not existing_alerts:
+            for case_index, evidence, endpoint in ALERT_CANDIDATES:
+                ref, _title, _status, amount, complaint_index = CASES[case_index]
+                typology, _amt, minutes_ago, _narr = COMPLAINTS[complaint_index]
+                decision = await evaluate_and_record(
+                    session,
+                    AlertCandidate(
+                        case_ref=ref,
+                        jurisdiction_id=str(district_id),
+                        evidence=evidence,
+                        amount_at_risk=Decimal(amount),
+                        fraud_initiated_at=now - timedelta(minutes=minutes_ago),
+                        top_candidate_ref=endpoint,
+                        typology=typology.value,
+                    ),
+                    now=now,
+                )
+                if decision.raise_alert:
+                    alerts_raised += 1
+                else:
+                    alerts_suppressed += 1
+
         await session.commit()
 
     await engine.dispose()
@@ -305,15 +342,71 @@ async def main() -> int:
     # A live 6-digit code is enough to sign in and is worthless 30 seconds later,
     # which is the whole point of TOTP.
     code = pyotp.TOTP(secret).now() if secret else "------"
+    auditor_code = pyotp.TOTP(auditor_secret).now() if auditor_secret else "------"
     print("seeded.\n")
-    print(f"  username     {USERNAME}")
-    print("  password     see PASSWORD in scripts/seed_demo.py")
-    print(f"  code now     {code}   (valid ~30s — re-run for a fresh one)")
+    print("  password     see PASSWORD in scripts/seed_demo.py (same for both)\n")
+    print(f"  investigator {USERNAME}")
+    print(f"    code now   {code}   (valid ~30s — re-run for a fresh one)")
+    print(f"  auditor      {AUDITOR_USERNAME}   — the only role with AUDIT_READ")
+    print(f"    code now   {auditor_code}")
     print(f"  jurisdiction Delhi Cyber Cell ({district_id})")
     print(f"  complaints   {created} new, {len(COMPLAINTS)} total")
     print(f"  endpoints    {endpoints_created} new, {len(ENDPOINTS)} total")
     print(f"  cases        {cases_created} new, {len(CASES)} total")
+    print(f"  alerts       {alerts_raised} raised, {alerts_suppressed} suppressed")
     return 0
+
+
+async def _upsert_account(
+    session,  # type: ignore[no-untyped-def]
+    *,
+    username: str,
+    display_name: str,
+    role: Role,
+    jurisdiction_id: uuid.UUID,
+) -> tuple[uuid.UUID, str]:
+    """Create or repair one account. Returns (id, TOTP secret).
+
+    On an existing account the password is reset and any lockout cleared, but
+    the MFA secret is left alone — rotating it would invalidate an authenticator
+    somebody has already scanned, which is the opposite of what re-running a
+    seed should do.
+    """
+    existing = await session.execute(
+        text("SELECT id, mfa_secret FROM iam.investigator WHERE username = :u"),
+        {"u": username},
+    )
+    row = existing.first()
+    if row is not None:
+        await session.execute(
+            text(
+                "UPDATE iam.investigator SET password_hash = :ph, is_active = true, "
+                "failed_login_count = 0, locked_until = NULL WHERE id = :id"
+            ),
+            {"ph": passwords.hash_password(PASSWORD), "id": row[0]},
+        )
+        return row[0], row[1]
+
+    account_id = uuid.uuid4()
+    secret = mfa.generate_secret()
+    await session.execute(
+        text(
+            "INSERT INTO iam.investigator "
+            "(id, username, display_name, password_hash, mfa_secret, mfa_enrolled, "
+            " role, jurisdiction_id, is_active, failed_login_count) "
+            "VALUES (:id, :u, :dn, :ph, :ms, true, CAST(:role AS iam.role), :j, true, 0)"
+        ),
+        {
+            "id": account_id,
+            "u": username,
+            "dn": display_name,
+            "ph": passwords.hash_password(PASSWORD),
+            "ms": secret,
+            "role": role.value,
+            "j": jurisdiction_id,
+        },
+    )
+    return account_id, secret
 
 
 async def _upsert_jurisdiction(
