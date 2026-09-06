@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/nav/PageHeader";
+
 import { useMemo, useState } from "react";
 
 /**
@@ -212,11 +214,11 @@ function Icon({ d, tone }: { d: string; tone: string }) {
 
 function Stat({ icon, tone, value, label }: { icon: string; tone: string; value: string; label: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-[#1E2B3D] bg-[#101B29] px-3.5 py-3">
+    <div className="flex items-center gap-3 rounded-lg border border-line bg-raised px-3.5 py-3">
       <Icon d={icon} tone={tone} />
       <div className="min-w-0">
-        <div className="text-[19px] font-semibold leading-none tabular-nums text-[#E8EEF6]">{value}</div>
-        <div className="mt-1 truncate text-[11px] text-[#7A8CA3]">{label}</div>
+        <div className="text-[19px] font-semibold leading-none tabular-nums text-ink-900">{value}</div>
+        <div className="mt-1 truncate text-[11px] text-ink-500">{label}</div>
       </div>
     </div>
   );
@@ -234,25 +236,23 @@ export default function MapPage() {
   const circ = 2 * Math.PI * 42;
 
   return (
-    <div className="-m-px min-h-screen bg-[#0A121C] px-5 py-5 text-[#E8EEF6]">
-      {/* ---------------- header ---------------- */}
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-[26px] font-semibold leading-tight tracking-tight">ATM / Branch Map</h1>
-          <p className="mt-1 text-[13px] text-[#7A8CA3]">
-            Actual and predicted cash-out locations from transaction analysis
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-[12px]">
-          <span className="rounded-md border border-[#1E2B3D] bg-[#101B29] px-3 py-1.5 tabular-nums text-[#A9BACB]">
-            01 Sep 2026 → 05 Sep 2026
-          </span>
-          <span className="rounded-md border border-[#1E2B3D] bg-[#101B29] px-3 py-1.5 text-[#A9BACB]">
-            All banks
-          </span>
-        </div>
-      </header>
-
+    <>
+      <PageHeader
+        title="ATM / branch map"
+        subtitle="Actual and predicted cash-out locations from transaction analysis"
+        searchPlaceholder="Search locations, endpoints…"
+        actions={
+          <>
+            <span className="rounded-md border border-line bg-raised px-3 py-1.5 text-[12px] tabular-nums text-ink-700">
+              01 Sep 2026 → 05 Sep 2026
+            </span>
+            <span className="rounded-md border border-line bg-raised px-3 py-1.5 text-[12px] text-ink-700">
+              All banks
+            </span>
+          </>
+        }
+      />
+      <div className="px-5 py-5 text-ink-900">
       {/* ---------------- stat row ---------------- */}
       <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
         <Stat icon={I.pin} tone="#4A8CD4" value="1,842" label="Total locations" />
@@ -264,7 +264,7 @@ export default function MapPage() {
 
       {/* ---------------- map + ranked list ---------------- */}
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <section className="relative overflow-hidden rounded-lg border border-[#1E2B3D] bg-[#0D1724]">
+        <section className="relative overflow-hidden rounded-lg border border-line bg-surface">
           <svg
             viewBox="0 0 420 268"
             className="w-full"
@@ -331,7 +331,7 @@ export default function MapPage() {
             <div className="mb-2 text-[11px] font-semibold text-[#C6D4E4]">Show on map</div>
             <div className="flex flex-col gap-1.5">
               {(["high", "medium", "low"] as Priority[]).map((p) => (
-                <label key={p} className="flex cursor-pointer items-center gap-2 text-[11px] text-[#A9BACB]">
+                <label key={p} className="flex cursor-pointer items-center gap-2 text-[11px] text-ink-700">
                   <input
                     type="checkbox"
                     checked={visible[p]}
@@ -345,14 +345,14 @@ export default function MapPage() {
             </div>
           </div>
 
-          <p className="border-t border-[#1E2B3D] px-3 py-2 text-[11px] text-[#5A6E88]">
+          <p className="border-t border-line px-3 py-2 text-[11px] text-[#5A6E88]">
             Schematic view — ward geometry and endpoints are illustrative, not a real jurisdiction.
           </p>
         </section>
 
-        <section className="rounded-lg border border-[#1E2B3D] bg-[#101B29] p-3">
+        <section className="rounded-lg border border-line bg-raised p-3">
           <h2 className="mb-1 text-[15px] font-semibold">Predicted cash-out locations</h2>
-          <p className="mb-3 text-[11px] leading-relaxed text-[#7A8CA3]">
+          <p className="mb-3 text-[11px] leading-relaxed text-ink-500">
             Mock figures for interface development. Live values come only from a validated,
             calibrated model run — there is no trained model yet.
           </p>
@@ -382,7 +382,7 @@ export default function MapPage() {
                     >
                       <td className="py-2 pr-2 tabular-nums text-[#5A6E88]">{i + 1}</td>
                       <td className="py-2 pr-2 font-medium text-[#DCE6F2]">{e.ref}</td>
-                      <td className="py-2 pr-2 text-[#7A8CA3]">{e.kind}</td>
+                      <td className="py-2 pr-2 text-ink-500">{e.kind}</td>
                       <td className="py-2 pr-2 text-right font-semibold tabular-nums" style={{ color: t.text }}>
                         {e.probability}%
                       </td>
@@ -394,7 +394,7 @@ export default function MapPage() {
                           {PRIORITY_LABEL[e.priority]}
                         </span>
                       </td>
-                      <td className="py-2 text-right tabular-nums text-[#A9BACB]">{e.distanceKm} km</td>
+                      <td className="py-2 text-right tabular-nums text-ink-700">{e.distanceKm} km</td>
                     </tr>
                   );
                 })}
@@ -411,7 +411,7 @@ export default function MapPage() {
 
       {/* ---------------- detail row ---------------- */}
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
-        <section className="rounded-lg border border-[#1E2B3D] bg-[#101B29] p-3.5">
+        <section className="rounded-lg border border-line bg-raised p-3.5">
           <div className="mb-2.5 flex items-center gap-2">
             <h2 className="text-[14px] font-semibold">Location details</h2>
             <span
@@ -421,7 +421,7 @@ export default function MapPage() {
               {PRIORITY_LABEL[selected.priority]} risk
             </span>
           </div>
-          <p className="text-[17px] font-semibold leading-snug text-[#E8EEF6]">{selected.ref}</p>
+          <p className="text-[17px] font-semibold leading-snug text-ink-900">{selected.ref}</p>
           <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5 text-[12px]">
             <div className="col-span-2">
               <dt className="text-[10px] uppercase tracking-wider text-[#5A6E88]">Area</dt>
@@ -446,7 +446,7 @@ export default function MapPage() {
           </dl>
         </section>
 
-        <section className="rounded-lg border border-[#1E2B3D] bg-[#101B29] p-3.5">
+        <section className="rounded-lg border border-line bg-raised p-3.5">
           <h2 className="mb-2.5 text-[14px] font-semibold">Risk analysis</h2>
           <div className="flex items-center gap-4">
             <svg viewBox="0 0 100 100" className="h-[104px] w-[104px] shrink-0" role="img" aria-label={`Score ${selected.probability} out of 100`}>
@@ -492,7 +492,7 @@ export default function MapPage() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-[#1E2B3D] bg-[#101B29] p-3.5">
+        <section className="rounded-lg border border-line bg-raised p-3.5">
           <h2 className="mb-2.5 text-[14px] font-semibold">Recent activity at this location</h2>
           {selected.activity.length === 0 ? (
             <p className="py-10 text-center text-[12px] text-[#5A6E88]">
@@ -512,11 +512,11 @@ export default function MapPage() {
                 <tbody>
                   {selected.activity.map((a) => (
                     <tr key={`${a.at}-${a.account}`} className="border-b border-[#18273A] last:border-0">
-                      <td className="py-2 pr-2 tabular-nums text-[#A9BACB]">{a.at}</td>
+                      <td className="py-2 pr-2 tabular-nums text-ink-700">{a.at}</td>
                       <td className="py-2 pr-2 text-right font-medium tabular-nums text-[#DCE6F2]">
                         {a.amount}
                       </td>
-                      <td className="py-2 pr-2 tabular-nums text-[#7A8CA3]">{a.account}</td>
+                      <td className="py-2 pr-2 tabular-nums text-ink-500">{a.account}</td>
                       <td className="py-2">
                         <span
                           className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
@@ -539,6 +539,7 @@ export default function MapPage() {
           )}
         </section>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

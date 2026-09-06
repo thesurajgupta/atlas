@@ -16,38 +16,41 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Dark operations console. The tokens keep their semantic names, so
-        // every page that was written against `paper` / `surface` / `ink` /
-        // `line` retheme without touching a single component — which is the
-        // reason the palette was tokenised in the first place.
-        paper: "#0B0E14", // page background
-        surface: "#141A24", // card / panel
-        raised: "#1B2330", // controls, inputs, hovered rows
+        // Taken from the ATM / branch map, which is the reference page. The
+        // palette is aligned to it rather than the other way round: it is the
+        // screen that was designed against the real brief, so it wins, and
+        // every other page inherits these tokens instead of re-picking hexes.
+        //
+        // Blue-biased neutrals, not grey. Under an accent this reads as chosen;
+        // a pure grey scale reads as a default nobody looked at.
+        paper: "#0A121C", // page background
+        surface: "#0D1724", // card / panel
+        raised: "#101B29", // controls, inputs, hovered rows
         ink: {
-          900: "#F1F5F9", // primary text
-          700: "#CBD5E1", // secondary
-          500: "#94A3B8", // tertiary / muted
-          300: "#64748B", // placeholder, disabled
+          900: "#E8EEF6", // primary text
+          700: "#A9BACB", // secondary
+          500: "#7A8CA3", // tertiary / muted
+          300: "#55647A", // placeholder, disabled
         },
         line: {
-          DEFAULT: "#233044", // hairline borders
-          strong: "#334155",
+          DEFAULT: "#1E2B3D", // hairline borders
+          strong: "#2C3D54",
         },
-        accent: "#38BDF8", // selection and focus only — never decoration
+        accent: "#4A8CD4", // selection and focus only — never decoration
         // Severity and evidence are the only colours that carry meaning
-        // (spec §25.5). Lifted off the light-theme values because #B3261E on
-        // #0B0E14 fails contrast — same semantics, legible ground.
+        // (spec §25.5), and these are the map's own values so a "high risk"
+        // marker there and a HIGH chip elsewhere are the same red.
         severity: {
-          low: "#94A3B8",
-          medium: "#FBBF24",
-          high: "#F87171",
-          critical: "#FB7185",
+          low: "#8E9BB0",
+          medium: "#E5A23D",
+          high: "#E5484D",
+          critical: "#F2666B",
         },
         evidence: {
-          strong: "#34D399",
-          moderate: "#60A5FA",
-          weak: "#FBBF24",
-          insufficient: "#94A3B8",
+          strong: "#3E9B6D",
+          moderate: "#4A8CD4",
+          weak: "#E5A23D",
+          insufficient: "#7A8CA3",
         },
       },
       fontFamily: {

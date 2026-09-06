@@ -40,8 +40,8 @@ export interface SyntheticCaseContext {
 }
 
 export const SYNTHETIC_CASE: SyntheticCaseContext = {
-  caseId: 'ATLAS-SYN-1042',
-  typology: 'Synthetic Customer Care Fraud',
+  caseId: 'CASE-2026-0914',
+  typology: 'Digital arrest',
   amountAtRisk: '284000.00',
   currency: 'INR',
   complaintTime: '14 Jan 2026 · 09:42',

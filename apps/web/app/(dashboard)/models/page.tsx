@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { PageHeader } from "@/components/nav/PageHeader";
 
 /**
  * Model performance (spec §21) — read from the newest `reports/eval/*.json`.
@@ -117,31 +118,30 @@ export default async function ModelsPage() {
 
   if (!report) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-8">
-        <h1 className="mb-2 text-lg font-semibold text-ink-900">Models</h1>
-        <div className="rounded-sm border border-line bg-surface px-4 py-8 text-center">
+      <>
+        <PageHeader title="Models" subtitle="No evaluation report found." />
+        <div className="mx-auto max-w-4xl px-6 py-5">
+        <div className="rounded-lg border border-line bg-surface px-4 py-8 text-center">
           <p className="text-sm text-ink-700">No evaluation report found.</p>
           <p className="mt-1 text-[12px] text-ink-500">
             Run <code className="font-mono">make eval</code> to generate one. Numbers only ever
             come from there.
           </p>
         </div>
-      </div>
+        </div>
+      </>
     );
   }
 
   const { provenance: p } = report;
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      <header className="mb-4">
-        <h1 className="text-lg font-semibold text-ink-900">Models</h1>
-        <p className="mt-0.5 text-sm text-ink-500">
-          From the newest <code className="font-mono">make eval</code> run. Nothing on this page
-          is computed in the browser.
-        </p>
-      </header>
-
+    <>
+      <PageHeader
+        title="Models"
+        subtitle="From the newest make eval run. Nothing here is computed in the browser."
+      />
+      <div className="mx-auto max-w-4xl px-6 py-5">
       <div className="mb-5">
         <StatusBanner status={report.status} />
       </div>
@@ -277,6 +277,7 @@ export default async function ModelsPage() {
           </div>
         </dl>
       </section>
-    </div>
+      </div>
+    </>
   );
 }

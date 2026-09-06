@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, auth, listAlerts, type ApiAlert } from "@/lib/api";
+import { PageHeader } from "@/components/nav/PageHeader";
 
 /**
  * Alerts (spec §27, §35.1) — live from `GET /api/v1/alerts`.
@@ -112,14 +113,13 @@ export default function AlertsPage() {
   const suppressed = useMemo(() => (alerts ?? []).filter((a) => !a.raised), [alerts]);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      <header className="mb-4">
-        <h1 className="text-lg font-semibold text-ink-900">Alerts</h1>
-        <p className="mt-0.5 text-sm text-ink-500">
-          Decisions the alert policy made, newest first. Live from the API.
-        </p>
-      </header>
-
+    <>
+      <PageHeader
+        title="Alerts"
+        subtitle="Decisions the alert policy made, newest first. Live from the API."
+        searchPlaceholder="Search alerts by case…"
+      />
+      <div className="mx-auto max-w-4xl px-6 py-5">
       {error && (
         <p
           role="alert"
@@ -205,6 +205,7 @@ export default function AlertsPage() {
           )}
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

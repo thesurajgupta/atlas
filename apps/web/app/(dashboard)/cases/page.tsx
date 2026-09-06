@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError, auth, listCases, type ApiCase } from "@/lib/api";
+import { PageHeader } from "@/components/nav/PageHeader";
 
 /**
  * Case list, read from the API (spec §26, §29).
@@ -57,14 +58,13 @@ export default function CasesPage() {
   }, [router]);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      <header className="mb-4">
-        <h1 className="text-lg font-semibold text-ink-900">Cases</h1>
-        <p className="mt-0.5 text-sm text-ink-500">
-          Open cases in your jurisdiction, newest first. Live from the API.
-        </p>
-      </header>
-
+    <>
+      <PageHeader
+        title="Cases"
+        subtitle="Open cases in your jurisdiction, newest first. Live from the API."
+        searchPlaceholder="Search cases…"
+      />
+      <div className="mx-auto max-w-4xl px-6 py-5">
       {error && (
         <p
           role="alert"
@@ -120,6 +120,7 @@ export default function CasesPage() {
           })}
         </ul>
       )}
-    </div>
+      </div>
+    </>
   );
 }

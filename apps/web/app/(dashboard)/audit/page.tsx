@@ -9,6 +9,7 @@ import {
   type ApiAuditEvent,
   type ChainStatus,
 } from "@/lib/api";
+import { PageHeader } from "@/components/nav/PageHeader";
 
 /**
  * Audit log (spec §32, §25.2) — live from `GET /api/v1/audit`.
@@ -122,9 +123,10 @@ export default function AuditPage() {
 
   if (forbidden) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-8">
-        <h1 className="mb-2 text-lg font-semibold text-ink-900">Audit</h1>
-        <div className="rounded-sm border border-line bg-surface px-4 py-8 text-center">
+      <>
+        <PageHeader title="Audit" subtitle="Permission required." />
+        <div className="mx-auto max-w-4xl px-6 py-5">
+        <div className="rounded-lg border border-line bg-surface px-4 py-8 text-center">
           <p className="text-sm text-ink-700">
             Your role does not hold <code className="font-mono">audit:read</code>.
           </p>
@@ -133,19 +135,19 @@ export default function AuditPage() {
             <code className="font-mono">demo.auditor</code> to read the log.
           </p>
         </div>
-      </div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <header className="mb-4">
-        <h1 className="text-lg font-semibold text-ink-900">Audit</h1>
-        <p className="mt-0.5 text-sm text-ink-500">
-          Every action, allowed and denied, hash-chained and tamper-evident. Live from the API.
-        </p>
-      </header>
-
+    <>
+      <PageHeader
+        title="Audit"
+        subtitle="Every action, allowed and denied, hash-chained and tamper-evident."
+        searchPlaceholder="Search by actor or resource…"
+      />
+      <div className="mx-auto max-w-6xl px-6 py-5">
       {chain && (
         <div className="mb-4">
           <ChainBanner chain={chain} />
@@ -260,6 +262,7 @@ export default function AuditPage() {
           </table>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

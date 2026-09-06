@@ -10,8 +10,8 @@ html {
 }
 
 body {
-  background-color: #0b0e14;
-  color: #f1f5f9;
+  background-color: #0a121c;
+  color: #e8eef6;
 }
 
 /* Tells the browser this is a dark document, so form controls, scrollbars and
@@ -24,7 +24,7 @@ body {
 /* Visible keyboard focus everywhere, no exceptions (quality floor, not a
    decorative choice). */
 :focus-visible {
-  outline: 2px solid #38bdf8;
+  outline: 2px solid #4a8cd4;
   outline-offset: 2px;
 }
 

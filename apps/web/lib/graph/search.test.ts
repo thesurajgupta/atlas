@@ -98,7 +98,7 @@ test('a role finds every entity in it', () => {
 });
 
 test('the case id matches the case, not an entity', () => {
-  const result = searchTrail('ATLAS-SYN-1042', targets);
+  const result = searchTrail('CASE-2026-0914', targets);
   assert.equal(result.matchesCase, true);
   assert.equal(result.entityIds.length, 0);
   assert.equal(result.isEmpty, false);

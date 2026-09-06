@@ -49,7 +49,7 @@ const pad = (value: number) => String(value).padStart(2, '0');
  */
 const DEMO_NOTIFICATIONS: readonly { text: string; when: string }[] = [
   { text: 'New synthetic cash-out prediction available', when: 'a few minutes ago' },
-  { text: 'Synthetic case ATLAS-SYN-1042 updated', when: 'earlier today' },
+  { text: 'Synthetic case CASE-2026-0914 updated', when: 'earlier today' },
   { text: 'Synthetic trail reconstruction completed', when: 'earlier today' },
 ];
 
@@ -122,7 +122,14 @@ export default function ConsoleHeader({
     now === null ? '' : `${pad(now.getDate())} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-slate-800 bg-slate-900 px-4">
+    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-surface px-4">
+      {/* The console is a full-bleed canvas and had no heading at all, so a
+          screen reader landed on it with nothing naming the page and the
+          document outline skipped a level. Visually hidden rather than shown:
+          the sidebar already says where you are, and a second title would take
+          height the canvas needs. */}
+      <h1 className="sr-only">Transaction trail</h1>
+
       <div className="relative mx-auto flex min-w-0 flex-1 items-center justify-center">
         <div className="relative w-full max-w-[650px] md:min-w-[320px]">
           <svg

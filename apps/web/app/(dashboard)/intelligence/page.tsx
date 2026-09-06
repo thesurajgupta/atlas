@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { PageHeader } from "@/components/nav/PageHeader";
+import { MockNotice } from "@/components/ui/Card";
 
 /**
  * Outbound intelligence (spec §28.3) — mock, and labelled as mock.
@@ -108,20 +110,20 @@ export default function IntelligencePage() {
   const [open, setOpen] = useState<string | null>(null);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      <header className="mb-4">
-        <h1 className="text-lg font-semibold text-ink-900">Intelligence</h1>
-        <p className="mt-0.5 text-sm text-ink-500">
-          Outbound packages to banks, and cross-jurisdiction hand-offs.
-        </p>
-      </header>
-
-      <p className="mb-5 rounded-sm border border-line bg-surface px-3 py-2 text-[12px] italic text-ink-500">
-        Mock records for interface development. The certification block, scope enforcement and
-        signing are implemented and tested in{" "}
-        <code className="font-mono not-italic">atlas/intel/certification.py</code>; there is no
-        persistence or endpoint behind this page yet, so nothing here has been sent.
-      </p>
+    <>
+      <PageHeader
+        title="Intelligence"
+        subtitle="Outbound packages to banks, and cross-jurisdiction hand-offs."
+      />
+      <div className="mx-auto max-w-4xl px-6 py-5">
+      <div className="mb-5">
+        <MockNotice>
+          Mock records for interface development. The certification block, scope
+          enforcement and signing are implemented and tested in{" "}
+          <code className="not-italic">atlas/intel/certification.py</code>; there is no
+          persistence or endpoint behind this page yet, so nothing here has been sent.
+        </MockNotice>
+      </div>
 
       <section className="mb-8">
         <h2 className="mb-2 text-[11px] uppercase tracking-wider text-ink-500">
@@ -221,6 +223,7 @@ export default function IntelligencePage() {
           ))}
         </ul>
       </section>
-    </div>
+      </div>
+    </>
   );
 }

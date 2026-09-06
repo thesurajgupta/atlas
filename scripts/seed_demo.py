@@ -45,11 +45,19 @@ DISPLAY_NAME = "Demo Investigator"
 AUDITOR_USERNAME = "demo.auditor"
 AUDITOR_DISPLAY_NAME = "Demo Auditor"
 
+#: How long before a complaint is filed the fraud actually began. Named once
+#: because three places need it and they were drifting: the complaint row, the
+#: alert candidate, and the golden-hour position the console computes from the
+#: first. A case whose alert says "38 minutes since fraud began" while its own
+#: record says 63 is the kind of inconsistency a judge notices in the first
+#: minute.
+FRAUD_LEAD_MINUTES = 25
+
 COMPLAINTS = [
     (
         FraudTypology.DIGITAL_ARREST,
         "820000.00",
-        38,
+        12,
         "Caller claimed to be from a courier firm, then a police officer.",
     ),
     (
@@ -174,6 +182,7 @@ async def main() -> int:
         # --- complaints ---
         now = datetime.now(UTC)
         created = 0
+        refreshed = 0
         for i, (typology, amount, minutes_ago, narrative) in enumerate(COMPLAINTS):
             ref = f"NCRP/2026/{100200 + i}"
             reported_at = now - timedelta(minutes=minutes_ago)
@@ -182,6 +191,26 @@ async def main() -> int:
                 {"r": ref},
             )
             if result.first():
+                # Re-anchor the clock instead of skipping. These offsets are
+                # relative to "now", and a complaint seeded yesterday is 25 hours
+                # past its golden hour — the console then truthfully reports zero
+                # cases worth interrupting anyone for, which is correct and makes
+                # the demo look broken. Re-running the seed is how you get a live
+                # scenario back.
+                await session.execute(
+                    text(
+                        "UPDATE complaints.complaint SET reported_at = :rep, "
+                        "fraud_initiated_at = :fraud, observed_at = :obs "
+                        "WHERE public_ref = :r"
+                    ),
+                    {
+                        "rep": reported_at,
+                        "fraud": reported_at - timedelta(minutes=FRAUD_LEAD_MINUTES),
+                        "obs": reported_at,
+                        "r": ref,
+                    },
+                )
+                refreshed += 1
                 continue
             await session.execute(
                 text(
@@ -197,7 +226,7 @@ async def main() -> int:
                     "id": uuid.uuid4(),
                     "ref": ref,
                     "rep": reported_at,
-                    "fraud": reported_at - timedelta(minutes=25),
+                    "fraud": reported_at - timedelta(minutes=FRAUD_LEAD_MINUTES),
                     "obs": reported_at,
                     "typ": typology.value,
                     "amt": Decimal(amount),
@@ -302,11 +331,15 @@ async def main() -> int:
         # actually decided — suppressions included. Seeding rows by hand would
         # let the page display an alert the policy would have refused.
         alerts_raised = alerts_suppressed = 0
-        existing_alerts = await session.scalar(
-            text("SELECT count(*) FROM alerts.alert WHERE jurisdiction_id = :j"),
+        # Cleared and re-decided rather than skipped. The policy's verdict is a
+        # function of `now` — the golden-hour suppression in particular — so
+        # keeping yesterday's rows next to re-anchored complaints would show a
+        # suppression whose stated reason no longer matches the case beside it.
+        await session.execute(
+            text("DELETE FROM alerts.alert WHERE jurisdiction_id = :j"),
             {"j": district_id},
         )
-        if not existing_alerts:
+        if True:
             for case_index, evidence, endpoint in ALERT_CANDIDATES:
                 ref, _title, _status, amount, complaint_index = CASES[case_index]
                 typology, _amt, minutes_ago, _narr = COMPLAINTS[complaint_index]
@@ -317,7 +350,10 @@ async def main() -> int:
                         jurisdiction_id=str(district_id),
                         evidence=evidence,
                         amount_at_risk=Decimal(amount),
-                        fraud_initiated_at=now - timedelta(minutes=minutes_ago),
+                        # Same instant the complaint row carries, not a second
+                        # derivation of it.
+                        fraud_initiated_at=now
+                        - timedelta(minutes=minutes_ago + FRAUD_LEAD_MINUTES),
                         top_candidate_ref=endpoint,
                         typology=typology.value,
                     ),
@@ -350,7 +386,7 @@ async def main() -> int:
     print(f"  auditor      {AUDITOR_USERNAME}   — the only role with AUDIT_READ")
     print(f"    code now   {auditor_code}")
     print(f"  jurisdiction Delhi Cyber Cell ({district_id})")
-    print(f"  complaints   {created} new, {len(COMPLAINTS)} total")
+    print(f"  complaints   {created} new, {refreshed} re-anchored to now, {len(COMPLAINTS)} total")
     print(f"  endpoints    {endpoints_created} new, {len(ENDPOINTS)} total")
     print(f"  cases        {cases_created} new, {len(CASES)} total")
     print(f"  alerts       {alerts_raised} raised, {alerts_suppressed} suppressed")
