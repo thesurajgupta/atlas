@@ -1,0 +1,15 @@
+{
+  "benford": {
+    "conformity": "close",
+    "mad": 0.00575,
+    "passed": true,
+    "sample_size": 10785
+  },
+  "dataset_version": "v1",
+  "degree_gini": 0.5517,
+  "forced": false,
+  "generated_at": "2026-09-06T17:45:03.527114+00:00",
+  "passed": true,
+  "seed": 26184,
+  "separability_status": "NOT_RUN: requires the synthetic-normal-population generator (spec \u00a723.1), which does not exist yet \u2014 see docs/ml/simulator-limitations.md. This dataset is not validated until that gate runs and passes."
+}

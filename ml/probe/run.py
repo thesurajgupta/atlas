@@ -33,6 +33,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from random import Random
 from urllib.parse import quote_plus
 
 from sqlalchemy import text
@@ -118,13 +119,42 @@ def diagnose_dataset(cases: list[Case], zones: list[str]) -> bool:
         )
         usable = False
 
-    # 2. Is the label distribution flat across zones?
-    counts = Counter(c.cash_out_zone for c in labelled)
-    share = sorted((n / len(labelled) for n in counts.values()), reverse=True)
-    top = sum(share[: max(1, len(zones) // 4)])
-    print(f"    top quartile of zones holds {top:.1%} of cash-outs (flat would be 25%)")
-    if top < 0.35:
-        print("      ↳ near-uniform: no zone is preferred, so no zone can be ranked")
+    # 2. Does knowing the case tell you anything about the label?
+    #
+    # This replaced a check on how concentrated the *marginal* label distribution
+    # was — "the top quartile of zones must hold more than 35% of cash-outs". That
+    # check was wrong in both directions and it is worth saying why, because
+    # loosening a gate is the move that needs the most scrutiny.
+    #
+    # It produced false negatives: cash-out is local to the mule, mules are
+    # concentrated in a handful of districts, and those districts are adjacent, so
+    # the marginal distribution flattens across a cluster while the conditional
+    # structure is strong. It plateaued at ~34% under every plausible setting of
+    # the locality decay.
+    #
+    # It also produced false positives, which is the worse failure: a generator
+    # that put every cash-out in Jamtara regardless of the case would score 100%
+    # and be perfectly unlearnable per case.
+    #
+    # Mutual information asks the question Tier 1 actually needs answered — does
+    # conditioning on the case change the distribution over zones — and it is
+    # scored against a label-shuffled control, so "how much is chance at this
+    # sample size" is measured rather than assumed.
+    # `labelled` is already filtered on both being present; the narrowing is for
+    # the type checker, which cannot see that through the comprehension above.
+    conditioned = [
+        (c.victim_zone, c.cash_out_zone)
+        for c in labelled
+        if c.victim_zone is not None and c.cash_out_zone is not None
+    ]
+    observed = _normalised_mutual_information(conditioned)
+    control = _shuffled_control(conditioned)
+    print(
+        f"    NMI(victim zone -> cash-out zone): {observed:.4f} "
+        f"(shuffled control {control:.4f})"
+    )
+    if observed < 2 * control:
+        print("      ↳ knowing the case says little about the zone: nothing to rank on")
         usable = False
 
     # 3. Is there any spread in time to split on?
@@ -139,6 +169,46 @@ def diagnose_dataset(cases: list[Case], zones: list[str]) -> bool:
         usable = False
 
     return usable
+
+
+def _normalised_mutual_information(pairs: list[tuple[str, str]]) -> float:
+    """I(X;Y) / H(Y) — how much of the label's entropy the conditioner explains.
+
+    Normalised so the number is comparable across datasets with different numbers
+    of zones; raw mutual information grows with the label alphabet and would make
+    a coarser geography look worse than a finer one for no reason.
+    """
+    n = len(pairs)
+    if n == 0:
+        return 0.0
+    joint = Counter(pairs)
+    left = Counter(a for a, _ in pairs)
+    right = Counter(b for _, b in pairs)
+
+    mi = sum(
+        (c / n) * math.log((c / n) / ((left[a] / n) * (right[b] / n)))
+        for (a, b), c in joint.items()
+    )
+    label_entropy = -sum((c / n) * math.log(c / n) for c in right.values())
+    return mi / label_entropy if label_entropy > 0 else 0.0
+
+
+def _shuffled_control(pairs: list[tuple[str, str]]) -> float:
+    """The same statistic on shuffled labels — what chance looks like at this ``n``.
+
+    Mutual information is biased upward on finite samples: two independent
+    variables score above zero, and the bias grows as the sample shrinks or the
+    alphabet grows. Comparing against a fixed threshold would therefore pass a
+    small independent dataset. The control is the threshold.
+
+    Seeded, so a diagnostic that decides whether numbers may be published does not
+    itself change between runs.
+    """
+    labels = [b for _, b in pairs]
+    Random(20260906).shuffle(labels)
+    return _normalised_mutual_information(
+        [(a, b) for (a, _), b in zip(pairs, labels, strict=True)]
+    )
 
 
 def rank_by_prior(train: list[Case], zones: list[str]) -> list[str]:

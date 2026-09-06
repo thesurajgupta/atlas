@@ -13,7 +13,7 @@ from atlas.core.enums import CashOutChannel
 
 from simulator.typologies.base import AccountRef, EndpointRef
 
-from .geography import ZONES, Zone, ZoneDensity
+from .geography import ZONE_BY_CODE, ZONES, Zone, ZoneDensity, sample_cash_out_zone
 
 # Channel weight per density tier (spec §8.1: AePS/BC is "now a dominant vector" outside urban
 # cores — modelled here as the majority channel in semi-urban/rural zones, not a minor ATM
@@ -105,11 +105,33 @@ class EndpointCatalog:
         return rng.choice(self._endpoints_for(rng, zone, channel))
 
     def _zone_for_account(self, rng: Random, account: AccountRef | None) -> Zone:
-        """Endpoints have no direct link to an account's home zone at this layer — see
-        ``population.Population``, which is what actually assigns a zone to an account. Falling
-        back to a plain random zone here (rather than raising) keeps this class usable
-        standalone, e.g. from tests that don't wire up a full ``Population``."""
-        return rng.choice(ZONES)
+        """Where this account's money is withdrawn.
+
+        **Issue #50 lived here.** This method took ``account`` and returned
+        ``rng.choice(ZONES)`` — the cash-out zone was statistically independent of
+        where the money had gone, so no feature derived from the trail carried any
+        information about the answer. Both rankers scored PAI ≈ 1.0, which is not a
+        finding about the approach; it is the arithmetic of random labels, and every
+        metric the project reported was measuring the generator.
+
+        ``AccountRef.jurisdiction_id`` is the zone code the population assigned, so the
+        home zone is resolvable here without a reference to ``Population`` — the
+        information was already in the argument that was being ignored.
+
+        The fall-back to a uniform draw is kept for the standalone case (a test that
+        does not wire up a ``Population``, an account with no zone), and it is
+        deliberately *not* a raise: this class is usable on its own, and that was the
+        original justification for the bug. The difference is that it is now the
+        exception rather than the whole behaviour.
+        """
+        home = (
+            ZONE_BY_CODE.get(account.jurisdiction_id)
+            if account is not None and account.jurisdiction_id is not None
+            else None
+        )
+        if home is None:
+            return rng.choice(ZONES)
+        return sample_cash_out_zone(rng, home=home)
 
 
 def channel_weights_for(

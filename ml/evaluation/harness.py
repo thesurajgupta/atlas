@@ -146,6 +146,28 @@ def _uplift(model: dict[str, Any], baseline: dict[str, Any]) -> list[dict[str, A
     return out
 
 
+#: Written by `make simulate` for the dataset it just wrote. See
+#: `simulator/__main__.py::_write_realism_record`.
+REALISM_DIR = Path(__file__).resolve().parents[2] / "reports" / "realism"
+
+
+def _realism_verdict(version: str) -> bool:
+    """Whether the dataset of this version passed §23.3 when it was generated.
+
+    Fails closed on every uncertainty — no record, unreadable record, or a record
+    saying the dataset was written with ``--force``. "We could not tell" and "it
+    failed" lead to the same place here, because the cost of the two mistakes is
+    not symmetric: reporting an unvalidated dataset as validated puts a number in
+    a deck that nobody can defend.
+    """
+    path = REALISM_DIR / f"{version}.json"
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(record.get("passed")) and not record.get("forced", False)
+
+
 async def build_report() -> dict[str, Any]:
     cases = await load_cases(DATASET_VERSION)
     if not cases:
@@ -176,14 +198,16 @@ async def build_report() -> dict[str, Any]:
     )
 
     distinct_times = len({c.fraud_initiated_at for c in cases})
-    # `realism_passed=False` is not a measurement — this harness has no way to
-    # run the Benford check, which lives in `simulator/validation` and scores the
-    # generator's own amounts. It fails closed rather than assuming: an
-    # unverified dataset must not be reported as a verified one, and #45 says
-    # this one does in fact fail.
+    # Read, not assumed. The realism checks need the scenario objects, which only
+    # exist inside `make simulate`, so this harness cannot re-derive them — it
+    # used to hardcode `realism_passed=False` and fail closed. That default was
+    # right, and it also meant a validated dataset could never be reported as
+    # validated. `simulator/__main__.py` now records its verdict per dataset
+    # version and this reads it; a missing or forced record still fails closed.
+    realism = _realism_verdict(DATASET_VERSION)
     verdict = assess(
         has_data=True,
-        realism_passed=False,
+        realism_passed=realism,
         has_signal=usable,
         distinct_event_times=distinct_times,
     )
@@ -205,28 +229,69 @@ async def build_report() -> dict[str, Any]:
         "baseline": baseline,
         "model": model,
         "uplift_over_baseline": _uplift(model, baseline),
-        "not_computed": {
-            "PEI": "formula not implemented (ml/evaluation/metrics.py)",
-            "hit_within_radius": "needs endpoint coordinates; atlas.geo does not supply them yet",
-            "ECE": "no calibrated probabilities exist to score",
-            "lead_time": "every scenario shares one fraud timestamp (issue #50)",
-        },
-        "caveats": [
-            "Dataset failed the Benford realism check (issue #45); it is not validated.",
-            (
-                "Cash-out zone is independent of the money trail (issue #50), so "
-                "these numbers measure the generator, not the approach."
-            ),
-            (
-                "PAI here is normalised by zone count, not area. It is not "
-                "comparable to PAI at a fixed H3 resolution (ADR-011)."
-            ),
-            (
-                "The separability gate has never run — a feature could be leaking "
-                "the label with nothing to catch it."
-            ),
-        ],
+        "not_computed": _not_computed(distinct_times),
+        "caveats": _caveats(realism=realism, distinct_times=distinct_times),
     }
+
+
+def _not_computed(distinct_times: int) -> dict[str, str]:
+    """Metrics this run did not produce, and why.
+
+    Derived rather than hardcoded. A fixed list goes stale silently, and a stale
+    "not computed because X" is worse than an absent one — it tells a reader that
+    a problem is still open after it has been fixed, and they will stop reading
+    the section.
+    """
+    reasons = {
+        "PEI": "formula not implemented (ml/evaluation/metrics.py)",
+        "hit_within_radius": "needs endpoint coordinates; atlas.geo does not supply them yet",
+        "ECE": "no calibrated probabilities exist to score",
+    }
+    if distinct_times < 2:
+        reasons["lead_time"] = "every scenario shares one fraud timestamp"
+    else:
+        reasons["lead_time"] = (
+            "the harness ranks zones, not times; a predicted window needs the "
+            "hazard model (spec §17), which is not built"
+        )
+    return reasons
+
+
+def _caveats(*, realism: bool, distinct_times: int) -> list[str]:
+    """What a reader must know before quoting anything above.
+
+    Each entry is conditioned on a measurement from this run. Two of these used
+    to be unconditional strings — that the dataset failed Benford, and that
+    cash-out location was independent of the trail — and both stopped being true
+    without the text changing.
+    """
+    caveats = [
+        (
+            "PAI here is normalised by zone count, not area. It is not comparable "
+            "to PAI at a fixed H3 resolution (ADR-011)."
+        ),
+        (
+            "The separability gate has never run — a feature could be leaking the "
+            "label with nothing to catch it (spec §23.3)."
+        ),
+    ]
+    if not realism:
+        caveats.insert(
+            0,
+            (
+                "The dataset did not pass the realism checks, or was written with "
+                "--force; it is not validated (issue #45, spec §23.3)."
+            ),
+        )
+    if distinct_times < 2:
+        caveats.insert(
+            0,
+            (
+                "Every scenario shares one fraud timestamp, so the temporal split "
+                "is nominal and these numbers are not held out in time (issue #50)."
+            ),
+        )
+    return caveats
 
 
 def write_report(report: dict[str, Any]) -> Path:

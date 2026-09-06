@@ -1,0 +1,122 @@
+{
+  "provenance": {
+    "git_sha": "b6fd8f9",
+    "git_branch": "integrate",
+    "working_tree_dirty": true,
+    "generated_at": "2026-09-06T17:40:13.508464+00:00",
+    "dataset_version": "v1"
+  },
+  "status": "DATASET_HAS_NO_SIGNAL",
+  "quotable": {
+    "verdict": false,
+    "blockers": [
+      "dataset fails the realism checks, so it is not validated (issue #45, spec \u00a723.3)",
+      "cash-out location is independent of everything a complaint knows, so any ranking scores at chance by construction (issue #50)"
+    ]
+  },
+  "dataset": {
+    "scenarios": 700,
+    "candidate_zones": 20,
+    "train": 350,
+    "test": 350,
+    "distinct_fraud_timestamps": 699
+  },
+  "baseline": {
+    "ranker": "historical zone frequency",
+    "cases_scored": 331,
+    "by_k": [
+      {
+        "k": 1,
+        "recall_at_k": 0.0574,
+        "pai": 1.148,
+        "area_flagged_fraction": 0.05
+      },
+      {
+        "k": 2,
+        "recall_at_k": 0.1118,
+        "pai": 1.1178,
+        "area_flagged_fraction": 0.1
+      },
+      {
+        "k": 3,
+        "recall_at_k": 0.1782,
+        "pai": 1.1883,
+        "area_flagged_fraction": 0.15
+      },
+      {
+        "k": 5,
+        "recall_at_k": 0.281,
+        "pai": 1.1239,
+        "area_flagged_fraction": 0.25
+      }
+    ]
+  },
+  "model": {
+    "ranker": "victim zone x typology, backing off to prior",
+    "cases_scored": 331,
+    "by_k": [
+      {
+        "k": 1,
+        "recall_at_k": 0.1329,
+        "pai": 2.6586,
+        "area_flagged_fraction": 0.05
+      },
+      {
+        "k": 2,
+        "recall_at_k": 0.2024,
+        "pai": 2.0242,
+        "area_flagged_fraction": 0.1
+      },
+      {
+        "k": 3,
+        "recall_at_k": 0.2598,
+        "pai": 1.7321,
+        "area_flagged_fraction": 0.15
+      },
+      {
+        "k": 5,
+        "recall_at_k": 0.3807,
+        "pai": 1.5227,
+        "area_flagged_fraction": 0.25
+      }
+    ]
+  },
+  "uplift_over_baseline": [
+    {
+      "k": 1,
+      "recall_delta": 0.0755,
+      "pai_delta": 1.5106,
+      "beats_baseline": true
+    },
+    {
+      "k": 2,
+      "recall_delta": 0.0906,
+      "pai_delta": 0.9064,
+      "beats_baseline": true
+    },
+    {
+      "k": 3,
+      "recall_delta": 0.0816,
+      "pai_delta": 0.5438,
+      "beats_baseline": true
+    },
+    {
+      "k": 5,
+      "recall_delta": 0.0997,
+      "pai_delta": 0.3988,
+      "beats_baseline": true
+    }
+  ],
+  "not_computed": {
+    "PEI": "formula not implemented (ml/evaluation/metrics.py)",
+    "hit_within_radius": "needs endpoint coordinates; atlas.geo does not supply them yet",
+    "ECE": "no calibrated probabilities exist to score",
+    "lead_time": "every scenario shares one fraud timestamp (issue #50)"
+  },
+  "caveats": [
+    "Dataset failed the Benford realism check (issue #45); it is not validated.",
+    "Cash-out zone is independent of the money trail (issue #50), so these numbers measure the generator, not the approach.",
+    "PAI here is normalised by zone count, not area. It is not comparable to PAI at a fixed H3 resolution (ADR-011).",
+    "The separability gate has never run \u2014 a feature could be leaking the label with nothing to catch it."
+  ]
+}

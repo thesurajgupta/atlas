@@ -8,7 +8,7 @@ into CI is future work (spec §47's phase plan), not part of this issue.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from random import Random
 
 from atlas.core.enums import FraudTypology
@@ -34,6 +34,41 @@ class RealismReport:
     passes: bool
 
 
+#: How long a batch spans. Every scenario used to share one timestamp, which made a
+#: temporal split impossible — and a temporal split is the only honest way to evaluate
+#: a forecast. Six months is enough for a train/test split with an embargo gap between
+#: them (``atlas.predict.splits``).
+BATCH_SPAN_DAYS = 180
+BATCH_START = datetime(2026, 1, 1, tzinfo=UTC)
+
+#: Relative likelihood a fraud begins in each hour, local time. Not fitted — these are
+#: documented assumptions (``docs/ml/typology-assumptions.md``) shaped by when victims
+#: are reachable: a trough overnight, a rise through the working day, a peak in the
+#: evening when people are at home and answering unknown numbers.
+_HOUR_WEIGHTS: tuple[float, ...] = (
+    0.2, 0.1, 0.1, 0.1, 0.2, 0.4,  # 00–05
+    0.8, 1.2, 1.6, 2.0, 2.2, 2.2,  # 06–11
+    1.8, 1.8, 2.0, 2.2, 2.4, 2.6,  # 12–17
+    2.8, 2.6, 2.0, 1.4, 0.8, 0.4,  # 18–23
+)
+
+
+def sample_fraud_start(rng: Random) -> datetime:
+    """When one fraud begins.
+
+    Spread over :data:`BATCH_SPAN_DAYS` with a diurnal rhythm rather than a single
+    instant. Two things depend on this and both are load-bearing: a temporal split
+    needs a spread of times to split on, and lead-time distribution is meaningless
+    without one — both were reported as *not computed* while every scenario shared
+    a timestamp.
+    """
+    day = rng.randrange(BATCH_SPAN_DAYS)
+    hour = rng.choices(range(24), weights=_HOUR_WEIGHTS, k=1)[0]
+    return BATCH_START + timedelta(
+        days=day, hours=hour, minutes=rng.randrange(60), seconds=rng.randrange(60)
+    )
+
+
 def generate_scenario_batch(
     rng: Random,
     population: Population,
@@ -44,13 +79,15 @@ def generate_scenario_batch(
     ``population``/``endpoints`` instance so mule reuse (and therefore the degree distribution
     this report checks) behaves as it would in a real batch run."""
     scenarios: list[FraudScenario] = []
-    fraud_initiated_at = datetime(2026, 1, 1, tzinfo=UTC)
     for generator_cls in GENERATORS.values():
         generator = generator_cls()
         for _ in range(count_per_typology):
             scenarios.append(
                 generator.generate(
-                    rng, population, endpoints, fraud_initiated_at=fraud_initiated_at
+                    rng,
+                    population,
+                    endpoints,
+                    fraud_initiated_at=sample_fraud_start(rng),
                 )
             )
     return scenarios

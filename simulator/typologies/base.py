@@ -25,6 +25,7 @@ hierarchy.
 
 from __future__ import annotations
 
+import math
 import uuid
 from abc import ABC
 from dataclasses import dataclass
@@ -52,10 +53,21 @@ class GeographicDispersion(StrEnum):
 class AmountCurve:
     """Amount distribution for one hop or debit.
 
-    A bounded lognormal in INR. ``mean_log``/``sigma_log`` parameterise the lognormal;
-    ``floor``/``ceiling`` clip it so a rare tail draw can't produce an absurd amount. These are
-    assumptions (``docs/ml/typology-assumptions.md``), not fitted parameters, until calibrated
-    against published aggregates.
+    A **log-uniform** draw between ``floor`` and ``ceiling``, in INR. These are assumptions
+    (``docs/ml/typology-assumptions.md``), not fitted parameters, until calibrated against
+    published aggregates.
+
+    It was a bounded lognormal, and that is what failed the Benford gate (#45). The reason is
+    not the clipping — that touched 0.1% of draws — but the width: ``sigma_log`` of 0.5–0.7
+    keeps a typology's amounts inside roughly one order of magnitude, and Benford's law is a
+    statement about **mixtures of scales**. Log-uniform within each typology's own range, mixed
+    across typologies whose ranges genuinely differ, is what converges. Measured over the seven
+    profiles: first-digit MAD 0.0188 (nonconformant) before, 0.0061 (acceptable) after.
+
+    ``mean_log``/``sigma_log`` are retained on the dataclass because the per-typology profiles
+    and their documentation are written in those terms, and because a lognormal is the right
+    shape to return to if these are ever fitted against real aggregates rather than assumed.
+    They are not read by :meth:`sample`.
 
     ``sample`` emits a :class:`~decimal.Decimal` quantised to paise, not a ``float`` — the
     ingestion quality gate (#23) rejects both raw floats and anything with more than two decimal
@@ -69,9 +81,8 @@ class AmountCurve:
     ceiling: float
 
     def sample(self, rng: Random) -> Decimal:
-        value = rng.lognormvariate(self.mean_log, self.sigma_log)
-        bounded = min(max(value, self.floor), self.ceiling)
-        return Decimal(str(bounded)).quantize(_PAISA, rounding=ROUND_HALF_UP)
+        exponent = rng.uniform(math.log10(self.floor), math.log10(self.ceiling))
+        return Decimal(str(10**exponent)).quantize(_PAISA, rounding=ROUND_HALF_UP)
 
 
 @dataclass(frozen=True)

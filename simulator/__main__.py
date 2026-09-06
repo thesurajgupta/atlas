@@ -2,7 +2,7 @@
 
 Backs ``make simulate``.
 
-    python -m simulator --scenarios-per-typology 100 --seed 26184
+    python -m simulator --scenarios-per-typology 400 --seed 26184
 
 Two things this command will not do.
 
@@ -21,7 +21,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 from random import Random
 from urllib.parse import quote_plus
 
@@ -31,6 +34,7 @@ from simulator.generators.endpoints import EndpointCatalog
 from simulator.generators.population import Population
 from simulator.truth.writer import ensure_schema, write_dataset
 from simulator.validation import generate_scenario_batch, run_realism_checks
+from simulator.validation.report import RealismReport
 
 #: Committed default so `make simulate` with no arguments is reproducible.
 DEFAULT_SEED = 26184
@@ -55,6 +59,51 @@ def _sim_database_url() -> str:
     return f"postgresql+asyncpg://{user}:{password}@{s.db_host}:{s.db_port}/{s.db_name}"
 
 
+#: Where the realism verdict is recorded for a dataset that was written.
+#:
+#: The evaluation harness runs in a separate process and cannot re-derive this —
+#: the checks need the scenario objects, which only exist during generation. It
+#: previously hardcoded ``realism_passed=False`` and failed closed, which was the
+#: right default and also meant a validated dataset could never be reported as
+#: validated. This is the missing channel between the two.
+REALISM_DIR = Path(__file__).resolve().parents[1] / "reports" / "realism"
+
+
+def _write_realism_record(
+    version: str, seed: int, report: RealismReport, *, forced: bool
+) -> None:
+    """Record whether this dataset passed §23.3, next to the dataset it describes.
+
+    ``forced`` is written as its own field rather than folded into ``passed``. A
+    dataset written with ``--force`` did not pass, and a reader that only sees a
+    boolean cannot tell "passed" from "was written anyway" — which is precisely
+    the distinction the harness needs before it lets a number be quoted.
+    """
+    REALISM_DIR.mkdir(parents=True, exist_ok=True)
+    (REALISM_DIR / f"{version}.json").write_text(
+        json.dumps(
+            {
+                "dataset_version": version,
+                "seed": seed,
+                "generated_at": datetime.now(UTC).isoformat(),
+                "passed": report.passes and not forced,
+                "forced": forced,
+                "benford": {
+                    "mad": round(report.benford.statistic, 6),
+                    "conformity": report.benford.conformity,
+                    "sample_size": report.benford.sample_size,
+                    "passed": report.benford.passes,
+                },
+                "degree_gini": round(report.degree_distribution.gini, 4),
+                "separability_status": report.separability_status,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
 async def run(args: argparse.Namespace) -> int:
     rng = Random(args.seed)
     population = Population()
@@ -70,7 +119,7 @@ async def run(args: argparse.Namespace) -> int:
     report = run_realism_checks(scenarios, population)
     print(
         f"  benford            {'pass' if report.benford.passes else 'FAIL'}"
-        f"  (chi-square {report.benford.statistic:.1f})"
+        f"  (MAD {report.benford.statistic:.4f}, {report.benford.conformity})"
     )
     print(
         f"  degree distribution {'pass' if report.degree_distribution.passes else 'FAIL'}"
@@ -99,6 +148,8 @@ async def run(args: argparse.Namespace) -> int:
     finally:
         await engine.dispose()
 
+    _write_realism_record(args.version, args.seed, report, forced=args.force)
+
     print(f"\nwrote truth.{args.version}")
     print(f"  scenarios  {counts['scenarios']}")
     print(f"  hops       {counts['hops']}")
@@ -120,7 +171,18 @@ def main() -> int:
     parser.add_argument(
         "--version", default=DEFAULT_VERSION, help="dataset version label"
     )
-    parser.add_argument("--scenarios-per-typology", type=int, default=100)
+    # 400, not 100. Benford MAD is a large-sample statistic and at n≈2,700 amounts
+    # its sampling error (sd ≈ 0.0010, measured over six seeds) is a sixth of the
+    # 0.012 threshold — close enough that the committed seed alone decided whether
+    # the gate passed. Seed 26184 scored 0.0122 while seeds 0–5 spanned 0.0067–0.0094
+    # on identical generators, which makes the verdict a property of the draw rather
+    # than of the data.
+    #
+    # At 400 per typology (n≈10,700) the mean falls to 0.0053 and the gate is
+    # measuring the generators again. This raises the gate's power; it does not
+    # relax it — the threshold is unchanged and the old amount distribution still
+    # fails at 0.0188.
+    parser.add_argument("--scenarios-per-typology", type=int, default=400)
     parser.add_argument(
         "--force",
         action="store_true",

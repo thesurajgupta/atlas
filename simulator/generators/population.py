@@ -11,7 +11,7 @@ from random import Random
 
 from simulator.typologies.base import AccountRef
 
-from .geography import Zone, sample_zone
+from .geography import Zone, sample_mule_zone, sample_zone
 
 
 class Population:
@@ -60,7 +60,7 @@ class Population:
         near_zone = (
             self._account_zone.get(near.account_id) if near is not None else None
         )
-        zone = sample_zone(rng, near=near_zone)
+        zone = sample_mule_zone(rng, near=near_zone)
         pool = self._mules_by_zone.setdefault(zone.code, [])
 
         if not pool or rng.random() < self._new_mule_probability:
