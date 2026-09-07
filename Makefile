@@ -121,6 +121,9 @@ verify-audit-chain: ## Recompute the audit hash chain and verify checkpoint sign
 
 # ---------------------------------------------------------------- data & ML
 .PHONY: simulate eval demo load-test
+code: ## Print a current TOTP code for the demo accounts
+	@ATLAS_ENV=development $(PY) scripts/demo_code.py
+
 simulate: ## Generate the synthetic dataset from the committed seed
 	@if [ -f simulator/__main__.py ]; then $(PY) -m simulator; \
 	 else echo "  ⏭  simulator: not implemented yet (phase 2)"; fi
