@@ -75,3 +75,8 @@ redisdata/
 # ---- Reports: keep committed evaluation reports, ignore scratch ----
 reports/scratch/
 *.log
+
+# MapLibre's worker bundle, copied out of node_modules by
+# apps/web/scripts/sync-map-worker.mjs on predev/prebuild. Generated, so that it
+# can never drift from the pinned maplibre-gl version.
+apps/web/public/vendor/

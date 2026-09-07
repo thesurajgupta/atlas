@@ -1,31 +1,35 @@
 /**
- * Basemap style resolution for the entity location map.
+ * Basemap style resolution for the MapLibre surfaces.
+ *
+ * ## Which maps this covers
+ *
+ * The money-trail entity locator (`components/money-trail/EntityLocationMap`).
+ * The cash-out map used to share this file; it renders a Google basemap now
+ * (`components/map/CashOutMap`, `lib/google-maps.ts`) and reads none of it.
  *
  * ## Where the basemap comes from
  *
  * The style URL is configuration, never a literal in the source. Set
  * `NEXT_PUBLIC_ATLAS_MAP_STYLE` to a self-hosted MapLibre style document and
- * the map renders that. Leave it unset — as it is in this repository — and the
- * map falls back to the offline style built below.
+ * this map renders that. Leave it unset — as it is in this repository — and it
+ * falls back to the offline graticule style built below.
  *
- * Nothing is hardcoded to a tile vendor. A public tile server would mean every
- * panel open sends a coordinate to a third party, which for a system with an
- * air-gapped deployment story is a decision for a deployment, not a default in
- * a public repo (PUBLIC_REPOSITORY_SECURITY_BOUNDARY.md, "deployment
- * specifics" and "live endpoint addresses").
+ * Nothing here is hardcoded to a tile vendor. A public tile server would mean
+ * every panel open sends a coordinate to a third party, which for a system with
+ * an air-gapped deployment story is a decision for a deployment, not a default
+ * in a public repo (PUBLIC_REPOSITORY_SECURITY_BOUNDARY.md, "deployment
+ * specifics" and "live endpoint addresses"). The cash-out map is the deliberate
+ * exception, and `lib/google-maps.ts` states the terms of it.
  *
- * ## What the offline style actually draws
+ * ## The offline style
  *
- * A graticule — meridians and parallels — and nothing else. This is worth being
- * precise about: a graticule is not a picture of the world, it is the
- * coordinate system itself. Every line is at exactly the latitude or longitude
- * it claims, at any zoom, with no data behind it to be wrong. Drawing invented
- * coastlines or streets to make the panel look map-like would be fabricating
- * geography; drawing the reference grid is not.
- *
- * So the fallback is a real MapLibre map — real projection, real panning,
- * markers at real coordinates — that simply has no imagery under it. The UI
- * says so rather than letting anyone assume the terrain is missing by accident.
+ * `buildGraticuleStyle` draws meridians and parallels and nothing else. This is
+ * worth being precise about: a graticule is not a picture of the world, it is
+ * the coordinate system itself. Every line is at exactly the latitude or
+ * longitude it claims, at any zoom, with no data behind it to be wrong. It
+ * requests nothing from anywhere. Drawing invented coastlines or streets to
+ * make a 140px panel look map-like would be fabricating geography; drawing the
+ * reference grid is not.
  */
 
 import type { StyleSpecification } from '@maplibre/maplibre-gl-style-spec';
@@ -43,8 +47,7 @@ export const CONFIGURED_MAP_STYLE_URL: string =
 
 export const HAS_CONFIGURED_BASEMAP = CONFIGURED_MAP_STYLE_URL.length > 0;
 
-const GRID_COLOR = '#1e293b';
-const GRID_COLOR_MAJOR = '#334155';
+const GRID_COLOR = '#20374F';
 
 /**
  * Meridians and parallels at `spacing` degrees, covering `extent` degrees
@@ -52,7 +55,7 @@ const GRID_COLOR_MAJOR = '#334155';
  *
  * Generated around the centre rather than globally because a 0.1° world
  * graticule is 5,400 lines that nobody will ever pan to. The window is wide
- * enough that panning at the zoom levels this map uses stays inside it.
+ * enough that panning at the zoom levels these maps use stays inside it.
  */
 export function buildGraticule(
   centreLatitude: number,
@@ -107,12 +110,13 @@ export function buildGraticule(
 }
 
 /**
- * The no-basemap style: a dark ground and a coordinate grid.
+ * The grid-only style: a dark ground and a coordinate grid.
  *
  * Two grids at different spacings, switched by zoom, so the map stays legible
- * whether the viewer is looking at a degree or a tenth of one.
+ * whether the viewer is looking at a degree or a tenth of one. Used by the
+ * small entity locator, where 140px of height has no room for coastline.
  */
-export function buildOfflineStyle(latitude: number, longitude: number): StyleSpecification {
+export function buildGraticuleStyle(latitude: number, longitude: number): StyleSpecification {
   return {
     version: 8,
     // No glyphs or sprite are declared: this style has no labels and no icons,
@@ -141,7 +145,7 @@ export function buildOfflineStyle(latitude: number, longitude: number): StyleSpe
         type: 'line',
         source: 'graticule-coarse',
         paint: {
-          'line-color': ['case', ['get', 'major'], GRID_COLOR_MAJOR, GRID_COLOR],
+          'line-color': ['case', ['get', 'major'], '#334155', GRID_COLOR],
           'line-width': ['case', ['get', 'major'], 1, 0.6],
         },
       },

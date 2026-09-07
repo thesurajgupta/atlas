@@ -4,7 +4,9 @@
   "private": true,
   "description": "ATLAS investigator interface (spec §25) — Next.js shell, case workspace and uncertainty rendering. Mock data only; no backend dependency.",
   "scripts": {
+    "predev": "node scripts/sync-map-worker.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/sync-map-worker.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -27,6 +29,7 @@
     "@testing-library/jest-dom": "6.4.8",
     "@testing-library/react": "16.0.1",
     "@types/geojson": "^7946.0.16",
+    "@types/google.maps": "^3.66.2",
     "@types/node": "20.14.15",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",

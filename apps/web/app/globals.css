@@ -149,3 +149,106 @@ body {
     animation-delay: 1.3s;
   }
 }
+
+/* ===========================================================================
+   Map surfaces (components/map).
+
+   The cash-out map renders a Google basemap, and the API builds two things
+   Tailwind cannot reach: the info window it wraps around our content, and its
+   own control chrome. `colorScheme: DARK` handles the controls; the info
+   window has to be restyled here, or a dark card arrives inside a white plate
+   with a white tail pointing at the marker.
+   =========================================================================== */
+
+/* The plate, its tail and its close button. `.gm-style` is the API's own
+   wrapper and is what makes these specific enough to win without !important. */
+.gm-style .gm-style-iw-c {
+  padding: 0;
+  border: 1px solid #22354c;
+  border-radius: 8px;
+  background: #0a1420;
+  box-shadow: 0 8px 24px rgb(2 6 12 / 55%);
+}
+
+.gm-style .gm-style-iw-d {
+  overflow: visible !important;
+  background: transparent;
+}
+
+/* The tail is a rotated square the API paints white; it has to follow the
+   plate or it reads as a chip of another element showing through. */
+.gm-style .gm-style-iw-tc::after {
+  background: #0a1420;
+}
+
+/* The close button ships as a dark glyph meant for a light plate. */
+.gm-style .gm-style-iw-chr button > span {
+  background-color: #7a8ca3 !important;
+}
+
+.atlas-map-info {
+  min-width: 178px;
+  max-width: 232px;
+  padding: 10px 12px 11px;
+  color: #c6d4e4;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.atlas-map-info__title {
+  color: #e8eef6;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.atlas-map-info__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+/* Outlined, not filled: a solid severity block this small beside a category
+   block reads as two severities. */
+.atlas-map-info__badge {
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.atlas-map-info__rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin-top: 8px;
+}
+
+.atlas-map-info__rows dt {
+  align-self: center;
+  color: #5a6e88;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.atlas-map-info__rows dd {
+  color: #dce6f2;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Not a footnote to skip: the popup is where an operator is closest to
+   mistaking a fixture for a place. */
+.atlas-map-info__note {
+  margin-top: 8px;
+  border-top: 1px solid #1b2b3f;
+  padding-top: 6px;
+  color: #5a6e88;
+  font-size: 9.5px;
+  line-height: 1.4;
+}

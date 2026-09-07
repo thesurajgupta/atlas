@@ -21,7 +21,12 @@ import { useEffect, useRef, useState } from 'react';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import { CONFIGURED_MAP_STYLE_URL, HAS_CONFIGURED_BASEMAP, buildOfflineStyle } from './map-style';
+import {
+  CONFIGURED_MAP_STYLE_URL,
+  HAS_CONFIGURED_BASEMAP,
+  buildGraticuleStyle,
+} from '@/lib/basemap';
+import { loadMapLibre } from '@/lib/maplibre';
 
 const ACCENT_COLOR = { amber: '#fbbf24', sky: '#38bdf8' } as const;
 
@@ -54,14 +59,14 @@ export default function EntityLocationMap({
 
     void (async () => {
       try {
-        const { Map: MapLibreMap } = await import('maplibre-gl');
+        const { Map: MapLibreMap } = await loadMapLibre();
         if (cancelled) return;
 
         map = new MapLibreMap({
           container,
           style: HAS_CONFIGURED_BASEMAP
             ? CONFIGURED_MAP_STYLE_URL
-            : buildOfflineStyle(latitude, longitude),
+            : buildGraticuleStyle(latitude, longitude),
           center: [longitude, latitude],
           zoom: 9,
           // Flat, always. This is a locator, not a terrain view.

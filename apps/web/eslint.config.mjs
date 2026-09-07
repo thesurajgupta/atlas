@@ -7,5 +7,8 @@ import nextTs from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  // public/vendor holds verbatim copies of dependency bundles (see
+  // scripts/sync-map-worker.mjs). Linting a vendor build reports on code this
+  // repository does not own and cannot fix.
+  globalIgnores([".next/**", "out/**", "build/**", "public/vendor/**", "next-env.d.ts"]),
 ]);

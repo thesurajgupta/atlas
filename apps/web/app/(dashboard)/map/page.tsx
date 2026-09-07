@@ -1,8 +1,14 @@
 "use client";
 
 import { PageHeader } from "@/components/nav/PageHeader";
+import CashOutMap, {
+  KIND_COLOR as MARKER_KIND_COLOR,
+  RISK_COLOR as MARKER_RISK_COLOR,
+  type CashOutMapPoint,
+} from "@/components/map/CashOutMap";
+import { destinationPoint } from "@/lib/geo";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 /**
  * ATM / branch cash-out map (spec §24, §25.1, issue #8).
@@ -13,15 +19,21 @@ import { useMemo, useState } from "react";
  * conventional treatment for a geospatial view and reads correctly against
  * spec §25.5 (information-dense, semantic colour, no decoration).
  *
- * Two things differ from the draft, both deliberate:
+ * Three things differ from the draft, all deliberate:
  *
  * 1. **Endpoints are synthetic.** The draft named real branches at real
- *    addresses with real coordinates and marked them fraud-likely. This
- *    repository is public; the rule is synthetic data only (CLAUDE.md rule 3).
+ *    addresses and marked them fraud-likely. This repository is public; the
+ *    rule is synthetic data only (CLAUDE.md rule 3).
  * 2. **Every figure is labelled illustrative.** Nothing is calibrated yet, so
  *    the probability column is mock data wearing the shape of the real thing.
  *    That is fine for interface work and is stated on the panel, rather than
  *    left for a reader to assume (CLAUDE.md rule 4).
+ * 3. **The geography is real; what is placed on it is not.** The schematic
+ *    ward diagram this page carried first was honest about being a sketch, but
+ *    it could not answer the question the screen exists for — how far, in
+ *    which direction, at what scale. `components/map/CashOutMap` draws Google
+ *    satellite imagery instead, and the caption under it separates the ground,
+ *    which is real, from the endpoints, which are not.
  *
  * Not wired to a prediction service, because there is not one yet.
  */
@@ -35,13 +47,36 @@ type Endpoint = {
   operator: string;
   area: string;
   distanceKm: number;
+  /**
+   * Bearing from the last confirmed hop, clockwise from true north. The map
+   * position is derived from this and `distanceKm` rather than stored beside
+   * them: two fields that must agree and are not derived from each other will
+   * eventually disagree, and here the disagreement would be a marker sitting
+   * at a distance the table denies.
+   */
+  bearing: number;
   probability: number;
   priority: Priority;
-  x: number;
-  y: number;
   factors: { label: string; weight: number }[];
   activity: { at: string; amount: string; account: string; status: string }[];
 };
+
+/**
+ * The last confirmed hop: the centre of the search, and the point every
+ * distance on this screen is measured from.
+ *
+ * A synthetic location, at a real coordinate in the Delhi NCR region. Real, so
+ * that the scale bar and the distance column mean something against the ground
+ * under them; synthetic in that no complaint put it there.
+ *
+ * Deliberately not the New Delhi city point: the basemap labels that, and an
+ * origin sitting exactly on it would put the place name underneath the marker
+ * cluster where neither can be read.
+ */
+const ORIGIN = { latitude: 28.664, longitude: 77.312, label: "the last confirmed hop" } as const;
+
+/** Search-radius rings, in kilometres — the same 2 / 5 / 10 the schematic drew. */
+const RING_RADII_KM = [2, 5, 10] as const;
 
 const ENDPOINTS: Endpoint[] = [
   {
@@ -53,8 +88,7 @@ const ENDPOINTS: Endpoint[] = [
     distanceKm: 2.4,
     probability: 92,
     priority: "high",
-    x: 152,
-    y: 98,
+    bearing: 34,
     factors: [
       { label: "Multiple mule accounts linked", weight: 25 },
       { label: "High-value cash withdrawals", weight: 20 },
@@ -79,8 +113,7 @@ const ENDPOINTS: Endpoint[] = [
     distanceKm: 4.8,
     probability: 78,
     priority: "high",
-    x: 252,
-    y: 164,
+    bearing: 118,
     factors: [
       { label: "Two trail accounts withdrew here", weight: 22 },
       { label: "Night-window volume above median", weight: 19 },
@@ -100,8 +133,7 @@ const ENDPOINTS: Endpoint[] = [
     distanceKm: 6.1,
     probability: 64,
     priority: "medium",
-    x: 112,
-    y: 184,
+    bearing: 205,
     factors: [
       { label: "One trail account holds an account here", weight: 20 },
       { label: "Counter withdrawals rising over 14 days", weight: 14 },
@@ -119,8 +151,7 @@ const ENDPOINTS: Endpoint[] = [
     distanceKm: 9.3,
     probability: 52,
     priority: "medium",
-    x: 308,
-    y: 104,
+    bearing: 302,
     factors: [
       { label: "AePS volume above agent median", weight: 17 },
       { label: "Proximity only — no trail account seen", weight: 9 },
@@ -136,8 +167,7 @@ const ENDPOINTS: Endpoint[] = [
     distanceKm: 12.7,
     probability: 31,
     priority: "low",
-    x: 86,
-    y: 230,
+    bearing: 248,
     factors: [{ label: "Within outer search radius only", weight: 8 }],
     activity: [],
   },
@@ -150,9 +180,140 @@ const ENDPOINTS: Endpoint[] = [
     distanceKm: 14.2,
     probability: 26,
     priority: "low",
-    x: 340,
-    y: 212,
+    bearing: 76,
     factors: [{ label: "Within outer search radius only", weight: 7 }],
+    activity: [],
+  },
+
+  /* --- out-of-district candidates ---------------------------------------
+   *
+   * A cash-out is not bounded by the district the complaint was filed in.
+   * Mule networks move value between states precisely because that is where
+   * a jurisdiction boundary sits, so a screen that only ever drew the local
+   * ring would hide the case's most interesting candidates and would make the
+   * national basemap pointless.
+   *
+   * These are the same synthetic construction as the block above — a ward and
+   * a bearing, not a premises. The region names are geography, which is real;
+   * nothing about the endpoint is.
+   */
+  {
+    id: "EP_MUM_2841",
+    ref: "Bank B ATM – Ward 2",
+    kind: "ATM",
+    operator: "Bank B",
+    area: "Ward 2, Maharashtra region",
+    distanceKm: 1149,
+    probability: 71,
+    priority: "high",
+    bearing: 203.8,
+    factors: [
+      { label: "Trail account opened in this circle", weight: 21 },
+      { label: "Operator seen in two earlier cases", weight: 18 },
+      { label: "Withdrawal window matches the pattern", weight: 15 },
+    ],
+    activity: [
+      { at: "05 Sep, 07:41", amount: "₹48,000", account: "XXXX2244", status: "Flagged" },
+      { at: "04 Sep, 21:05", amount: "₹42,000", account: "XXXX9911", status: "Under review" },
+    ],
+  },
+  {
+    id: "EP_LKO_3390",
+    ref: "Bank C ATM – Ward 8",
+    kind: "ATM",
+    operator: "Bank C",
+    area: "Ward 8, Uttar Pradesh region",
+    distanceKm: 412.7,
+    probability: 58,
+    priority: "medium",
+    bearing: 117.3,
+    factors: [
+      { label: "One trail account withdrew in this circle", weight: 19 },
+      { label: "Volume above circle median", weight: 12 },
+    ],
+    activity: [
+      { at: "04 Sep, 16:22", amount: "₹28,000", account: "XXXX5510", status: "Under review" },
+    ],
+  },
+  {
+    id: "EP_JAI_4712",
+    ref: "Bank A Branch – Ward 1",
+    kind: "Branch",
+    operator: "Bank A",
+    area: "Ward 1, Rajasthan region",
+    distanceKm: 244.1,
+    probability: 55,
+    priority: "medium",
+    bearing: 220.3,
+    factors: [
+      { label: "Counter withdrawals rising over 14 days", weight: 16 },
+      { label: "Shared operator device fingerprint", weight: 13 },
+    ],
+    activity: [],
+  },
+  {
+    id: "EP_KOL_5508",
+    ref: "Bank D ATM – Ward 11",
+    kind: "ATM",
+    operator: "Bank D",
+    area: "Ward 11, West Bengal region",
+    distanceKm: 1299,
+    probability: 47,
+    priority: "medium",
+    bearing: 118.6,
+    factors: [{ label: "AePS volume above agent median", weight: 15 }],
+    activity: [],
+  },
+  {
+    id: "EP_PAT_6134",
+    ref: "Bank C BC agent – Ward 14",
+    kind: "Branch",
+    operator: "Bank C",
+    area: "Ward 14, Bihar region",
+    distanceKm: 846.3,
+    probability: 38,
+    priority: "low",
+    bearing: 111.2,
+    factors: [{ label: "AePS volume above agent median", weight: 11 }],
+    activity: [],
+  },
+  {
+    id: "EP_NAG_6820",
+    ref: "Bank A ATM – Ward 6",
+    kind: "ATM",
+    operator: "Bank A",
+    area: "Ward 6, Madhya Pradesh region",
+    distanceKm: 849.3,
+    probability: 34,
+    priority: "low",
+    bearing: 167,
+    factors: [{ label: "Corridor endpoint only — no trail account seen", weight: 9 }],
+    activity: [],
+  },
+  {
+    id: "EP_HYD_7266",
+    ref: "Bank B Branch – Ward 10",
+    kind: "Branch",
+    operator: "Bank B",
+    area: "Ward 10, Telangana region",
+    distanceKm: 1252.1,
+    probability: 29,
+    priority: "low",
+    bearing: 174,
+    factors: [{ label: "Corridor endpoint only — no trail account seen", weight: 8 }],
+    activity: [],
+  },
+  {
+    id: "EP_BLR_8093",
+    ref: "Bank D ATM – Ward 13",
+    kind: "ATM",
+    operator: "Bank D",
+    area: "Ward 13, Karnataka region",
+    distanceKm: 1738.8,
+    probability: 24,
+    priority: "low",
+    bearing: 178.8,
+    factors: [{ label: "Corridor endpoint only — no trail account seen", weight: 7 }],
     activity: [],
   },
 ];
@@ -176,18 +337,43 @@ function requireFirst(list: readonly Endpoint[]): Endpoint {
 }
 const DEFAULT_ENDPOINT = requireFirst(ENDPOINTS);
 
-const WARDS = [
-  "M18 16 L150 10 L166 84 L60 108 L14 70 Z",
-  "M150 10 L300 18 L316 80 L166 84 Z",
-  "M300 18 L404 26 L400 100 L316 80 Z",
-  "M14 70 L60 108 L74 200 L20 208 Z",
-  "M60 108 L166 84 L200 184 L74 200 Z",
-  "M166 84 L316 80 L322 180 L200 184 Z",
-  "M316 80 L400 100 L404 198 L322 180 Z",
-  "M20 208 L74 200 L110 256 L26 254 Z",
-  "M74 200 L200 184 L232 254 L110 256 Z",
-  "M200 184 L322 180 L330 252 L232 254 Z",
-];
+/**
+ * Distances here run from 2 km to over 1,700, so a fixed unit reads badly at
+ * one end or the other: "1738.8 km" is false precision on a candidate nobody
+ * will drive to, and "2 km" loses the detail that matters most on the one they
+ * will. Metres below a kilometre, one decimal inside the local ring, whole
+ * kilometres beyond it.
+ */
+function formatDistance(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  if (km < 100) return `${km.toFixed(1)} km`;
+  return `${Math.round(km).toLocaleString("en-IN")} km`;
+}
+
+/** An endpoint nobody has seen a withdrawal at is a prediction and nothing else. */
+const isPredictedOnly = (endpoint: Endpoint) => endpoint.activity.length === 0;
+
+/**
+ * Every endpoint as a map point, resolved once at module scope.
+ *
+ * Not in a `useMemo`: the fixture never changes, and the identity has to be
+ * stable across renders — the map builds one marker per entry and would
+ * otherwise rebuild all of them on every keystroke elsewhere on the page.
+ *
+ * The distance is formatted here rather than in the map so the popup and the
+ * table's distance column cannot drift apart.
+ */
+const MAP_POINTS: readonly CashOutMapPoint[] = ENDPOINTS.map((endpoint) => ({
+  ...destinationPoint(ORIGIN, endpoint.bearing, endpoint.distanceKm),
+  id: endpoint.id,
+  label: endpoint.ref,
+  kind: endpoint.kind,
+  operator: endpoint.operator,
+  area: endpoint.area,
+  priority: endpoint.priority,
+  probability: endpoint.probability,
+  distanceLabel: formatDistance(endpoint.distanceKm),
+}));
 
 /* --- small inline icons; no new dependency, matching the shell's approach --- */
 const I = {
@@ -212,6 +398,46 @@ function Icon({ d, tone }: { d: string; tone: string }) {
   );
 }
 
+/* --- map legend controls -------------------------------------------------
+ *
+ * Every checkbox below filters the map and the ranked table through the same
+ * predicate. A control that changes only one of the two would be worse than no
+ * control at all, because both are on screen at once.
+ */
+
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="mt-2 first:mt-0">
+      <div className="mb-1 text-[9.5px] font-semibold uppercase tracking-wider text-[#5A6E88]">
+        {label}
+      </div>
+      <div className="flex flex-col gap-1">{children}</div>
+    </div>
+  );
+}
+
+function Check({
+  checked,
+  onChange,
+  children,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-ink-700">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="h-3.5 w-3.5 shrink-0 accent-[#4A8CD4]"
+      />
+      {children}
+    </label>
+  );
+}
+
 function Stat({ icon, tone, value, label }: { icon: string; tone: string; value: string; label: string }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-line bg-raised px-3.5 py-3">
@@ -224,12 +450,39 @@ function Stat({ icon, tone, value, label }: { icon: string; tone: string; value:
   );
 }
 
+type Kind = Endpoint["kind"];
+/** Whether anyone has actually seen a withdrawal here, or the endpoint is only predicted. */
+type Evidence = "predicted" | "observed";
+
 export default function MapPage() {
   const [selectedId, setSelectedId] = useState(DEFAULT_ENDPOINT.id);
-  const [visible, setVisible] = useState<Record<Priority, boolean>>({ high: true, medium: true, low: true });
+  const [riskShown, setRiskShown] = useState<Record<Priority, boolean>>({
+    high: true,
+    medium: true,
+    low: true,
+  });
+  const [kindShown, setKindShown] = useState<Record<Kind, boolean>>({ ATM: true, Branch: true });
+  const [evidenceShown, setEvidenceShown] = useState<Record<Evidence, boolean>>({
+    predicted: true,
+    observed: true,
+  });
+  const [showPaths, setShowPaths] = useState(true);
 
-  const shown = useMemo(() => ENDPOINTS.filter((e) => visible[e.priority]), [visible]);
+  // One predicate for both surfaces. The map is handed the whole fixture and a
+  // set of ids to show rather than a filtered list, so a filter toggle changes
+  // marker visibility instead of rebuilding every marker.
+  const shown = useMemo(
+    () =>
+      ENDPOINTS.filter(
+        (e) =>
+          riskShown[e.priority] &&
+          kindShown[e.kind] &&
+          evidenceShown[isPredictedOnly(e) ? "predicted" : "observed"],
+      ),
+    [riskShown, kindShown, evidenceShown],
+  );
   const ranked = useMemo(() => [...shown].sort((a, b) => b.probability - a.probability), [shown]);
+  const visibleIds = useMemo(() => new Set(shown.map((e) => e.id)), [shown]);
   const selected = ENDPOINTS.find((e) => e.id === selectedId) ?? DEFAULT_ENDPOINT;
   const tone = TONE[selected.priority];
 
@@ -264,89 +517,99 @@ export default function MapPage() {
 
       {/* ---------------- map + ranked list ---------------- */}
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <section className="relative overflow-hidden rounded-lg border border-line bg-surface">
-          <svg
-            viewBox="0 0 420 268"
-            className="w-full"
-            role="img"
-            aria-label="Schematic ward map with the last confirmed transaction hop, distance rings at 2, 5 and 10 kilometres, and candidate cash-out endpoints coloured by risk level."
-          >
-            <rect x="0" y="0" width="420" height="268" fill="#0D1724" />
-            <g fill="#152436" stroke="#22354C" strokeWidth="1">
-              {WARDS.map((d) => (
-                <path key={d} d={d} />
-              ))}
-            </g>
-            <g fill="#5A6E88" fontSize="7.5" fontFamily="ui-monospace, monospace" letterSpacing="0.5">
-              <text x="84" y="54">WARD 3</text>
-              <text x="220" y="52">WARD 4</text>
-              <text x="342" y="56">WARD 7</text>
-              <text x="34" y="158">WARD 9</text>
-              <text x="118" y="148">WARD 12</text>
-              <text x="246" y="136">WARD 5</text>
-            </g>
-
-            <g fill="none" stroke="#3E7BC4" strokeWidth="0.9" opacity="0.55" strokeDasharray="4 4">
-              <circle cx="196" cy="130" r="44" />
-              <circle cx="196" cy="130" r="82" />
-              <circle cx="196" cy="130" r="118" />
-            </g>
-            <g fill="#4A8CD4" fontSize="7.5" fontFamily="ui-monospace, monospace">
-              <text x="200" y="84">2 km</text>
-              <text x="200" y="46">5 km</text>
-              <text x="200" y="9">10 km</text>
-            </g>
-
-            <circle cx="196" cy="130" r="4.5" fill="#4A8CD4" />
-            <circle cx="196" cy="130" r="10" fill="none" stroke="#4A8CD4" strokeWidth="1.2" />
-            <text x="196" y="152" textAnchor="middle" fill="#4A8CD4" fontSize="7.5" fontFamily="ui-monospace, monospace">
-              last confirmed hop
-            </text>
-
-            {shown.map((e) => {
-              const t = TONE[e.priority];
-              const sel = e.id === selected.id;
-              return (
-                <g
-                  key={e.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`${e.ref}, ${PRIORITY_LABEL[e.priority]} risk`}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => setSelectedId(e.id)}
-                  onKeyDown={(ev) => {
-                    if (ev.key === "Enter" || ev.key === " ") setSelectedId(e.id);
-                  }}
-                >
-                  {sel && <circle cx={e.x} cy={e.y} r="14" fill="none" stroke="#E8EEF6" strokeWidth="1.4" />}
-                  <circle cx={e.x} cy={e.y} r={e.priority === "low" ? 6.5 : 9} fill={t.dot} opacity="0.28" />
-                  <circle cx={e.x} cy={e.y} r={e.priority === "low" ? 4 : 5.5} fill={t.dot} />
-                </g>
-              );
-            })}
-          </svg>
+        {/* Column height is set by the ranked list beside this one, which grows
+            with the candidate count. The map takes whatever that leaves rather
+            than sitting at a fixed height above dead space. */}
+        <section className="relative flex min-h-[480px] flex-col overflow-hidden rounded-lg border border-line bg-surface">
+          <CashOutMap
+            className="w-full flex-1"
+            points={MAP_POINTS}
+            visibleIds={visibleIds}
+            origin={ORIGIN}
+            ringRadiiKm={RING_RADII_KM}
+            showPaths={showPaths}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
 
           {/* legend overlay, as in the design */}
-          <div className="absolute left-3 top-3 rounded-lg border border-[#22354C] bg-[#0A1420]/95 p-2.5 backdrop-blur">
+          <div className="absolute left-3 top-3 w-[172px] rounded-lg border border-[#22354C] bg-[#0A1420]/95 p-2.5 backdrop-blur">
             <div className="mb-2 text-[11px] font-semibold text-[#C6D4E4]">Show on map</div>
-            <div className="flex flex-col gap-1.5">
+
+            <FilterGroup label="Risk">
               {(["high", "medium", "low"] as Priority[]).map((p) => (
-                <label key={p} className="flex cursor-pointer items-center gap-2 text-[11px] text-ink-700">
-                  <input
-                    type="checkbox"
-                    checked={visible[p]}
-                    onChange={() => setVisible((v) => ({ ...v, [p]: !v[p] }))}
-                    className="h-3.5 w-3.5 accent-[#4A8CD4]"
+                <Check
+                  key={p}
+                  checked={riskShown[p]}
+                  onChange={() => setRiskShown((v) => ({ ...v, [p]: !v[p] }))}
+                >
+                  <span
+                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: MARKER_RISK_COLOR[p] }}
                   />
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: TONE[p].dot }} />
                   {PRIORITY_LABEL[p]}-risk locations
-                </label>
+                </Check>
               ))}
+            </FilterGroup>
+
+            <FilterGroup label="Type">
+              <Check
+                checked={kindShown.ATM}
+                onChange={() => setKindShown((v) => ({ ...v, ATM: !v.ATM }))}
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 bg-[#4C5A6E]"
+                  style={{ borderColor: MARKER_KIND_COLOR.ATM }}
+                />
+                ATMs
+              </Check>
+              <Check
+                checked={kindShown.Branch}
+                onChange={() => setKindShown((v) => ({ ...v, Branch: !v.Branch }))}
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-[1px] border-2 bg-[#4C5A6E]"
+                  style={{ borderColor: MARKER_KIND_COLOR.Branch }}
+                />
+                Bank branches
+              </Check>
+            </FilterGroup>
+
+            <FilterGroup label="Evidence">
+              <Check
+                checked={evidenceShown.predicted}
+                onChange={() => setEvidenceShown((v) => ({ ...v, predicted: !v.predicted }))}
+              >
+                Predicted only
+              </Check>
+              <Check
+                checked={evidenceShown.observed}
+                onChange={() => setEvidenceShown((v) => ({ ...v, observed: !v.observed }))}
+              >
+                With recorded activity
+              </Check>
+            </FilterGroup>
+
+            <FilterGroup label="Overlay">
+              <Check checked={showPaths} onChange={() => setShowPaths((on) => !on)}>
+                <span className="inline-block h-[2px] w-2.5 shrink-0 bg-accent" />
+                Lines to last hop
+              </Check>
+            </FilterGroup>
+
+            {/* The rings and the origin dot are drawn but not toggleable, so the
+                key says what they are rather than offering a control. */}
+            <div className="mt-2 border-t border-[#22354C] pt-2 text-[10px] leading-relaxed text-ink-500">
+              <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle" />
+              Last confirmed hop, with 2 / 5 / 10 km rings
+              <span className="mt-1 block">Fill is risk; outline is ATM or branch.</span>
             </div>
           </div>
 
           <p className="border-t border-line px-3 py-2 text-[11px] text-[#5A6E88]">
-            Schematic view — ward geometry and endpoints are illustrative, not a real jurisdiction.
+            Satellite basemap and place names © Google — real geography. The endpoints, wards and
+            scores placed on that ground are synthetic: no complaint put them there, and no
+            calibrated model scored them.
           </p>
         </section>
 
@@ -394,7 +657,7 @@ export default function MapPage() {
                           {PRIORITY_LABEL[e.priority]}
                         </span>
                       </td>
-                      <td className="py-2 text-right tabular-nums text-ink-700">{e.distanceKm} km</td>
+                      <td className="py-2 text-right tabular-nums text-ink-700">{formatDistance(e.distanceKm)}</td>
                     </tr>
                   );
                 })}
@@ -441,7 +704,7 @@ export default function MapPage() {
             </div>
             <div>
               <dt className="text-[10px] uppercase tracking-wider text-[#5A6E88]">From last hop</dt>
-              <dd className="mt-0.5 tabular-nums text-[#C6D4E4]">{selected.distanceKm} km</dd>
+              <dd className="mt-0.5 tabular-nums text-[#C6D4E4]">{formatDistance(selected.distanceKm)}</dd>
             </div>
           </dl>
         </section>
