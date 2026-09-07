@@ -1,0 +1,288 @@
+{
+  "dataset_version": "v1",
+  "batch": "a71a5000-0000-4000-8000-0000000000b1",
+  "origins": [
+    "262c3589-9b1b-591d-9bcf-10c7c6bff405",
+    "ce812d65-9749-55a0-b722-394494b07b4a",
+    "0d63c3ff-176e-583c-9a56-2d729b47c5b3",
+    "75b0818f-02a3-5158-ba70-10ade8f35b2e",
+    "75f43ac7-bd19-51dc-8625-9e1d02e60f0e",
+    "33138f3b-8d9c-5842-a71b-ae4ffccd3e95",
+    "a83ce5cb-c14c-5040-9719-d8048355cf41",
+    "4cc2a263-0431-57fd-bdb5-8f3641973cb1",
+    "5d9a2eb7-b7cc-59b2-b37f-d2a4d8e4c99f",
+    "047bceb9-3cf5-5a2f-a05b-e6c7088270d6",
+    "2b53eb3b-b25a-5c83-a57d-eb935f1890d9",
+    "ff42fe7b-733f-5565-ac37-dd123e650354",
+    "2ed1b7e7-29e0-50bf-aebb-ac2e3ce66b71",
+    "14dfe4bb-ccf9-5ab9-acdf-b65ff276a442",
+    "56c45e79-fd7b-5bd4-9475-9a92ecd58d85",
+    "ab7fae09-8f88-5b14-aaf0-9a7c8b1b07d1",
+    "711bd540-c9ad-51f5-9e23-e32659dfb4ae",
+    "d013d203-99ef-5bcf-8107-7a4598dfb7b6",
+    "e9762984-7c04-5f77-9633-f33cad932ec2",
+    "ead13168-b815-5a1d-9ae6-ebe93fb41159",
+    "e47607e8-95fb-5616-be34-fc2833a040ec",
+    "0691e38a-4312-5305-8ff5-b25ac828577c",
+    "7e1273f9-073c-5365-b6b6-24673acbdb91",
+    "4f39b8e6-30a3-5c76-80b5-86472ae05eb7",
+    "f57e0534-e831-54f4-810b-bdfebbab2569",
+    "6e64eff0-5efd-588b-af03-07e6aa88f548",
+    "cacb727a-db12-5d8e-a1b7-ed21bb86a3a1",
+    "0316b891-af1f-5d51-a1c9-6545bbe28c96",
+    "b01f2193-0042-5efd-8406-8a0597aca7e4",
+    "60ece6f8-a0dc-5943-b869-6a01f7840665",
+    "119af899-cc6f-57ee-b611-acc06ef3caf1",
+    "eb249c96-28d8-58dc-9d73-66547b19a9d2",
+    "f00d9879-b46d-5700-9691-7c9829b2cdc9",
+    "6c02a40f-106b-5a00-9f90-a3778756dad0",
+    "4516fcd5-50fb-55c7-8563-6b507cf6492d",
+    "711b39e4-89d5-52bc-8d5f-4fb8c9c88462",
+    "e429780d-753c-5479-93ae-c3885b58c0f8",
+    "cc23f2d7-f26f-5a7b-b052-b3cd656b557b",
+    "f31c1cb6-418e-591c-a815-4eb4f3f3f344",
+    "c78fdef8-e882-5557-875d-355827c80b69"
+  ],
+  "detail": [
+    {
+      "entity_id": "262c3589-9b1b-591d-9bcf-10c7c6bff405",
+      "account_ref": "victim-001491",
+      "scenario": "77be96bf-41c1-4c49-99da-3b92dbd58203",
+      "hops": 6
+    },
+    {
+      "entity_id": "ce812d65-9749-55a0-b722-394494b07b4a",
+      "account_ref": "victim-001152",
+      "scenario": "75f21f69-cce1-4063-b56f-410232ce282f",
+      "hops": 6
+    },
+    {
+      "entity_id": "0d63c3ff-176e-583c-9a56-2d729b47c5b3",
+      "account_ref": "victim-003075",
+      "scenario": "e6cb5dcd-7c01-4303-ab39-68d2f77122ee",
+      "hops": 6
+    },
+    {
+      "entity_id": "75b0818f-02a3-5158-ba70-10ade8f35b2e",
+      "account_ref": "victim-003283",
+      "scenario": "e37e70d3-bf72-44c7-9fcf-1cd81c395a11",
+      "hops": 6
+    },
+    {
+      "entity_id": "75f43ac7-bd19-51dc-8625-9e1d02e60f0e",
+      "account_ref": "victim-001165",
+      "scenario": "c9295538-199d-47e3-8c20-733cf601e29c",
+      "hops": 6
+    },
+    {
+      "entity_id": "33138f3b-8d9c-5842-a71b-ae4ffccd3e95",
+      "account_ref": "victim-001294",
+      "scenario": "ffb3272d-cfb4-4c55-aba6-eb9442b0a410",
+      "hops": 5
+    },
+    {
+      "entity_id": "a83ce5cb-c14c-5040-9719-d8048355cf41",
+      "account_ref": "victim-003238",
+      "scenario": "bb5c58f9-ea36-4e75-8bff-ea22187e3bc4",
+      "hops": 5
+    },
+    {
+      "entity_id": "4cc2a263-0431-57fd-bdb5-8f3641973cb1",
+      "account_ref": "victim-003276",
+      "scenario": "c79d38fd-3f87-462d-935c-fdc065f599ab",
+      "hops": 5
+    },
+    {
+      "entity_id": "5d9a2eb7-b7cc-59b2-b37f-d2a4d8e4c99f",
+      "account_ref": "victim-001319",
+      "scenario": "da31b022-2684-4b66-b7c4-3c1e6c9a8079",
+      "hops": 5
+    },
+    {
+      "entity_id": "047bceb9-3cf5-5a2f-a05b-e6c7088270d6",
+      "account_ref": "victim-001221",
+      "scenario": "10d02e64-06fb-4d6e-a1c2-fde7ee672033",
+      "hops": 4
+    },
+    {
+      "entity_id": "2b53eb3b-b25a-5c83-a57d-eb935f1890d9",
+      "account_ref": "victim-001314",
+      "scenario": "9e7931a4-0778-4996-b99a-5a0305aac87e",
+      "hops": 4
+    },
+    {
+      "entity_id": "ff42fe7b-733f-5565-ac37-dd123e650354",
+      "account_ref": "victim-001177",
+      "scenario": "bfa2915c-4dc8-4a7a-81fe-f9db1e54847a",
+      "hops": 3
+    },
+    {
+      "entity_id": "2ed1b7e7-29e0-50bf-aebb-ac2e3ce66b71",
+      "account_ref": "victim-004197",
+      "scenario": "ae33b027-2f6f-4f69-a8f8-afdd752a7d03",
+      "hops": 3
+    },
+    {
+      "entity_id": "14dfe4bb-ccf9-5ab9-acdf-b65ff276a442",
+      "account_ref": "victim-000506",
+      "scenario": "3b4b4733-90d5-4203-9d6c-725cd44b52c2",
+      "hops": 3
+    },
+    {
+      "entity_id": "56c45e79-fd7b-5bd4-9475-9a92ecd58d85",
+      "account_ref": "victim-000113",
+      "scenario": "f27db8d2-6ba0-4acb-adff-96bb5bd5404d",
+      "hops": 3
+    },
+    {
+      "entity_id": "ab7fae09-8f88-5b14-aaf0-9a7c8b1b07d1",
+      "account_ref": "victim-000144",
+      "scenario": "7a8d1aeb-9cab-49c2-8caf-684f0b0037a2",
+      "hops": 3
+    },
+    {
+      "entity_id": "711bd540-c9ad-51f5-9e23-e32659dfb4ae",
+      "account_ref": "victim-003549",
+      "scenario": "11d77f25-bc75-44a3-ae3b-54dfe342f811",
+      "hops": 3
+    },
+    {
+      "entity_id": "d013d203-99ef-5bcf-8107-7a4598dfb7b6",
+      "account_ref": "victim-003603",
+      "scenario": "518f3bba-d0b7-4517-b287-f40c8e59371a",
+      "hops": 3
+    },
+    {
+      "entity_id": "e9762984-7c04-5f77-9633-f33cad932ec2",
+      "account_ref": "victim-001458",
+      "scenario": "f619c7da-47a3-4215-bc2b-baf133160839",
+      "hops": 3
+    },
+    {
+      "entity_id": "ead13168-b815-5a1d-9ae6-ebe93fb41159",
+      "account_ref": "victim-001037",
+      "scenario": "5a786cf4-d06f-4382-adfb-9bdaf710e086",
+      "hops": 3
+    },
+    {
+      "entity_id": "e47607e8-95fb-5616-be34-fc2833a040ec",
+      "account_ref": "victim-002520",
+      "scenario": "277603d8-ea5c-4b7c-b7dc-10f2bd05e3bf",
+      "hops": 2
+    },
+    {
+      "entity_id": "0691e38a-4312-5305-8ff5-b25ac828577c",
+      "account_ref": "victim-001913",
+      "scenario": "44189c7d-b2c5-4786-845e-b1df67fbfd3a",
+      "hops": 2
+    },
+    {
+      "entity_id": "7e1273f9-073c-5365-b6b6-24673acbdb91",
+      "account_ref": "victim-001829",
+      "scenario": "8e86af20-17c8-498b-90a2-5119b1d40677",
+      "hops": 2
+    },
+    {
+      "entity_id": "4f39b8e6-30a3-5c76-80b5-86472ae05eb7",
+      "account_ref": "victim-000483",
+      "scenario": "c70614da-ba84-401c-a798-1e387828f2c3",
+      "hops": 2
+    },
+    {
+      "entity_id": "f57e0534-e831-54f4-810b-bdfebbab2569",
+      "account_ref": "victim-002127",
+      "scenario": "76d8d494-a7fa-4ed2-82d7-96dfd03f960f",
+      "hops": 2
+    },
+    {
+      "entity_id": "6e64eff0-5efd-588b-af03-07e6aa88f548",
+      "account_ref": "victim-004259",
+      "scenario": "75553b40-8706-4e90-bc13-f55f09f8ab4c",
+      "hops": 1
+    },
+    {
+      "entity_id": "cacb727a-db12-5d8e-a1b7-ed21bb86a3a1",
+      "account_ref": "victim-004334",
+      "scenario": "8f311409-1c1a-41aa-91c3-2bffc9fe9195",
+      "hops": 1
+    },
+    {
+      "entity_id": "0316b891-af1f-5d51-a1c9-6545bbe28c96",
+      "account_ref": "victim-004706",
+      "scenario": "ba44f21d-ce31-46f6-a655-67ff9da7e175",
+      "hops": 1
+    },
+    {
+      "entity_id": "b01f2193-0042-5efd-8406-8a0597aca7e4",
+      "account_ref": "victim-004320",
+      "scenario": "cc2ecf33-79ef-41dc-b783-532cfb864008",
+      "hops": 1
+    },
+    {
+      "entity_id": "60ece6f8-a0dc-5943-b869-6a01f7840665",
+      "account_ref": "victim-002932",
+      "scenario": "c6d84fc0-b162-44b8-968d-e13818ab6fbc",
+      "hops": 1
+    },
+    {
+      "entity_id": "119af899-cc6f-57ee-b611-acc06ef3caf1",
+      "account_ref": "victim-004342",
+      "scenario": "00affc5b-0d07-4e23-b4a1-40337f93829c",
+      "hops": 1
+    },
+    {
+      "entity_id": "eb249c96-28d8-58dc-9d73-66547b19a9d2",
+      "account_ref": "victim-004580",
+      "scenario": "9055dff5-30be-41d5-8b2a-68ade42f6f7b",
+      "hops": 1
+    },
+    {
+      "entity_id": "f00d9879-b46d-5700-9691-7c9829b2cdc9",
+      "account_ref": "victim-000212",
+      "scenario": "34d6ab6d-a144-4e32-9eb7-c4aadf79b607",
+      "hops": 1
+    },
+    {
+      "entity_id": "6c02a40f-106b-5a00-9f90-a3778756dad0",
+      "account_ref": "victim-002151",
+      "scenario": "83ee0feb-5fb6-4193-8617-b859f0e4b25d",
+      "hops": 1
+    },
+    {
+      "entity_id": "4516fcd5-50fb-55c7-8563-6b507cf6492d",
+      "account_ref": "victim-004451",
+      "scenario": "37f5fd66-c136-47d1-951a-6548ee41421f",
+      "hops": 1
+    },
+    {
+      "entity_id": "711b39e4-89d5-52bc-8d5f-4fb8c9c88462",
+      "account_ref": "victim-002126",
+      "scenario": "208a8a6c-1355-4c71-9783-b5a8e9e979ea",
+      "hops": 1
+    },
+    {
+      "entity_id": "e429780d-753c-5479-93ae-c3885b58c0f8",
+      "account_ref": "victim-002733",
+      "scenario": "bae91b06-29a9-4d42-b933-3b8f49e6b152",
+      "hops": 1
+    },
+    {
+      "entity_id": "cc23f2d7-f26f-5a7b-b052-b3cd656b557b",
+      "account_ref": "victim-004747",
+      "scenario": "0c0f83ad-1dc2-484c-8da1-d6028426fb8f",
+      "hops": 1
+    },
+    {
+      "entity_id": "f31c1cb6-418e-591c-a815-4eb4f3f3f344",
+      "account_ref": "victim-004438",
+      "scenario": "bca8329f-3a4b-4500-933f-8a94e5207202",
+      "hops": 1
+    },
+    {
+      "entity_id": "c78fdef8-e882-5557-875d-355827c80b69",
+      "account_ref": "victim-000598",
+      "scenario": "d3d8a44d-0b9d-4edb-a1e2-9a6ffe5023d3",
+      "hops": 1
+    }
+  ]
+}

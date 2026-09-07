@@ -107,8 +107,13 @@ async def evaluate_and_record(
     *,
     now: datetime,
     budget: int = DEFAULT_BUDGET_PER_WINDOW,
-) -> AlertDecision:
-    """Decide, persist the decision, and return it.
+) -> tuple[AlertDecision, Alert]:
+    """Decide, persist the decision, and return both.
+
+    The row comes back alongside the decision because a caller that has to
+    re-query for what it just wrote is a caller that can read a different row —
+    the dedup key is deliberately not unique, since a repeat writes its own
+    suppression row.
 
     A row is written **either way**. An alert that was not sent is a judgement
     somebody may have to explain later, and "no alert appeared" cannot
@@ -137,18 +142,17 @@ async def evaluate_and_record(
         budget=budget,
     )
 
-    session.add(
-        Alert(
-            case_ref=candidate.case_ref,
-            jurisdiction_id=jurisdiction_id,
-            severity=decision.severity,
-            raised=decision.raise_alert,
-            # Verbatim. The policy writes sentences a human can act on, and a
-            # paraphrase here would be a second, worse copy that drifts.
-            reason=decision.reason,
-            dedup_key=decision.dedup_key,
-            issued_at=now,
-        )
+    alert = Alert(
+        case_ref=candidate.case_ref,
+        jurisdiction_id=jurisdiction_id,
+        severity=decision.severity,
+        raised=decision.raise_alert,
+        # Verbatim. The policy writes sentences a human can act on, and a
+        # paraphrase here would be a second, worse copy that drifts.
+        reason=decision.reason,
+        dedup_key=decision.dedup_key,
+        issued_at=now,
     )
+    session.add(alert)
     await session.flush()
-    return decision
+    return decision, alert

@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Briefcase, Clock, IndianRupee } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Briefcase,
+  Clock,
+  IndianRupee,
+  PlayCircle,
+} from "lucide-react";
 import {
   ApiError,
   auth,
@@ -74,6 +81,15 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         subtitle="What is happening right now, in your jurisdiction."
+        actions={
+          <Link
+            href="/demo"
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-paper transition-opacity hover:opacity-90"
+          >
+            <PlayCircle className="h-3.5 w-3.5" aria-hidden />
+            Run demo investigation
+          </Link>
+        }
       />
 
       <div className="space-y-4 px-6 py-5">

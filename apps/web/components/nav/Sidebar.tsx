@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Landmark,
   MapPin,
+  PlayCircle,
   Radio,
   ScrollText,
   Search,
@@ -40,6 +41,7 @@ import {
  */
 const CASEWORK = [
   { label: "Dashboard", href: "/overview", icon: LayoutDashboard },
+  { label: "Demo investigation", href: "/demo", icon: PlayCircle },
   { label: "New complaint", href: "/new-complaint", icon: FilePlus },
   { label: "Cases", href: "/cases", icon: Briefcase },
   { label: "Investigation", href: "/investigation", icon: Search },

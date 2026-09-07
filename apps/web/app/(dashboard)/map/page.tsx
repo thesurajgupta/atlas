@@ -1,5 +1,7 @@
 "use client";
 
+import { ActiveRunBanner } from "@/components/demo/ActiveRunBanner";
+
 import { PageHeader } from "@/components/nav/PageHeader";
 
 import { useMemo, useState } from "react";
@@ -252,6 +254,7 @@ export default function MapPage() {
           </>
         }
       />
+      <ActiveRunBanner />
       <div className="px-5 py-5 text-ink-900">
       {/* ---------------- stat row ---------------- */}
       <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">

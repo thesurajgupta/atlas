@@ -345,3 +345,66 @@ export const createComplaint = (body: ComplaintCreate) =>
     method: "POST",
     body: JSON.stringify(body),
   });
+
+/* ------------------------------------------------------------ demo pipeline */
+
+export interface TrailHopDto {
+  edge_id: string;
+  from_entity_id: string;
+  to_entity_id: string;
+  edge_type: string;
+  amount: string;
+  occurred_at: string;
+  channel: string | null;
+  rail: string | null;
+  depth: number;
+}
+
+export interface TrailPathDto {
+  hops: TrailHopDto[];
+  truncated: boolean;
+  reaches_cash_out: boolean;
+  elapsed_seconds: number;
+  longest_dwell_seconds: number;
+  retained_fraction: string;
+}
+
+export interface TrailResponse {
+  origin_entity_id: string;
+  as_of: string;
+  max_depth: number;
+  paths: TrailPathDto[];
+}
+
+/**
+ * `as_of` is required and has no default, here as well as on the server.
+ *
+ * It is the parameter that turns a temporal bound into a formality if it is
+ * ever given one, so the client does not get to omit it either.
+ */
+export const getTrail = (originEntityId: string, asOf: string) =>
+  request<TrailResponse>(
+    `/api/v1/graph/trail/${originEntityId}?as_of=${encodeURIComponent(asOf)}`,
+  );
+
+export interface AlertEvaluateRequest {
+  case_ref: string;
+  typology: string;
+  evidence: "STRONG" | "MODERATE" | "WEAK" | "INSUFFICIENT";
+  amount_at_risk: string;
+  fraud_initiated_at: string;
+  top_candidate_ref: string | null;
+}
+
+/**
+ * Runs the real alert policy and records what it decided.
+ *
+ * Returns 201 whether or not an alert was raised — a row is written either way,
+ * and the caller must be able to tell a suppression from a pipeline that never
+ * ran. Check `raised`, not the status code.
+ */
+export const evaluateAlert = (body: AlertEvaluateRequest) =>
+  request<ApiAlert>("/api/v1/alerts/evaluate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });

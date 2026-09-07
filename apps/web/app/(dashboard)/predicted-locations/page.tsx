@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { ActiveRunBanner } from '@/components/demo/ActiveRunBanner';
 import {
   Search,
   Bell,
@@ -192,6 +193,7 @@ export default function PredictedLocationsDashboard() {
             </div>
           </div>
         </header>
+        <ActiveRunBanner />
 
         <p className="mx-6 mt-4 rounded-md border border-line bg-surface px-3 py-2 text-[11px] italic text-ink-500">
           Mock predictions for interface development. No Tier 2 ranker is trained and

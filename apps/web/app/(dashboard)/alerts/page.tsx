@@ -1,5 +1,7 @@
 "use client";
 
+import { ActiveRunBanner } from "@/components/demo/ActiveRunBanner";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, auth, listAlerts, type ApiAlert } from "@/lib/api";
@@ -119,6 +121,7 @@ export default function AlertsPage() {
         subtitle="Decisions the alert policy made, newest first. Live from the API."
         searchPlaceholder="Search alerts by case…"
       />
+      <ActiveRunBanner />
       <div className="mx-auto max-w-4xl px-6 py-5">
       {error && (
         <p

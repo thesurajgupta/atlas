@@ -137,7 +137,11 @@ class AccountPool(Protocol):
     def sample_victim(self, rng: Random) -> AccountRef: ...
 
     def sample_mule(
-        self, rng: Random, *, near: AccountRef | None = None
+        self,
+        rng: Random,
+        *,
+        near: AccountRef | None = None,
+        exclude: AccountRef | None = None,
     ) -> AccountRef: ...
 
 
@@ -264,7 +268,7 @@ class TypologyGenerator(ABC):
         clock = fraud_initiated_at
         current = victim
         for _ in range(depth):
-            mule = accounts.sample_mule(rng, near=current)
+            mule = accounts.sample_mule(rng, near=current, exclude=current)
             clock = clock + timedelta(
                 minutes=rng.uniform(*self.profile.inter_hop_delay_minutes)
             )
