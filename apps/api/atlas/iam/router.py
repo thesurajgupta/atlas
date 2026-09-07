@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import pyotp
 from fastapi import APIRouter, Request, status
+from sqlalchemy import select
 
 from atlas.audit.service import Actor, AuditRequest, record
 from atlas.core import context
+from atlas.core.config import Environment, get_settings
+from atlas.core.errors import NotFoundError
 from atlas.iam import service
 from atlas.iam.dependencies import CurrentInvestigator, SessionDep
-from atlas.iam.schemas import InvestigatorProfile, LoginRequest, RefreshRequest, TokenResponse
+from atlas.iam.models import Investigator
+from atlas.iam.schemas import (
+    DemoLoginRequest,
+    InvestigatorProfile,
+    LoginRequest,
+    RefreshRequest,
+    TokenResponse,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -73,6 +84,74 @@ async def login(payload: LoginRequest, request: Request, session: SessionDep) ->
         access_token=result.access_token,
         refresh_token=result.refresh_token,
         expires_in=result.expires_in,
+    )
+
+
+#: The only accounts `demo-login` will act for. An allow-list rather than a
+#: pattern: "any username starting with demo." is a rule somebody satisfies by
+#: accident, and this endpoint must never act for an account it was not built
+#: for.
+_DEMO_ACCOUNTS = frozenset({"demo.investigator", "demo.auditor"})
+
+
+@router.post("/demo-login", response_model=TokenResponse)
+async def demo_login(
+    payload: DemoLoginRequest, request: Request, session: SessionDep
+) -> TokenResponse:
+    """Sign in as a seeded demo account without typing a TOTP code.
+
+    **This is not an authentication bypass, and the distinction is the whole
+    design.** The real :func:`service.authenticate` still runs: the password is
+    still verified with argon2id, the TOTP is still verified, the account lockout
+    still applies, and the login is audited like any other. The only thing that
+    changes is *who computes the second factor* — the server generates the
+    current code from the account's own secret instead of a human copying six
+    digits before they expire.
+
+    A code that expires mid-typing is real friction during a demo, and the
+    tempting fix is to drop MFA in development. That would be worse than it
+    looks: jurisdiction scoping and every audit row's actor both derive from the
+    authenticated identity, so an unauthenticated mode would not be the same
+    product with a step removed — it would be a different one where the controls
+    cannot be demonstrated at all.
+
+    Three gates, all of which must hold:
+
+    * **development only.** Anywhere else this is a 404, exactly as if the route
+      did not exist, so its presence is not discoverable in a deployed
+      environment.
+    * **allow-listed accounts only**, and the list is explicit rather than a
+      pattern.
+    * **the account must already be seeded.** This creates nothing.
+
+    The password is *not* held here. The caller still sends it and it is still
+    verified — an endpoint that knew a working password would be a credential in
+    the source tree, which is what it exists to avoid.
+    """
+    if get_settings().env is not Environment.DEVELOPMENT:
+        # 404 rather than 403: a 403 would confirm the endpoint exists, and the
+        # first thing worth knowing about a convenience route is nothing at all.
+        raise NotFoundError("not found")
+
+    if payload.username not in _DEMO_ACCOUNTS:
+        raise NotFoundError("not found")
+
+    investigator = await session.scalar(
+        select(Investigator).where(Investigator.username == payload.username)
+    )
+    if investigator is None or investigator.mfa_secret is None:
+        raise NotFoundError("not found")
+
+    # The second factor, computed rather than typed. Everything else below is
+    # the ordinary login path.
+    return await login(
+        LoginRequest(
+            username=payload.username,
+            password=payload.password,
+            totp_code=pyotp.TOTP(investigator.mfa_secret).now(),
+        ),
+        request,
+        session,
     )
 
 

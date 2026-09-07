@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, login } from "@/lib/api";
+import { ApiError, demoLogin, login } from "@/lib/api";
 
 /**
  * Sign-in against the real API (spec §29).
@@ -14,7 +14,24 @@ import { ApiError, login } from "@/lib/api";
  * password" from "wrong code". The API already returns the same shape for all
  * three, and repeating that here keeps the client from becoming the oracle the
  * server refuses to be.
+ *
+ * The demo buttons below remove the *friction*, not the control: a TOTP code
+ * that expires while you read the form is a real problem during a demo, and the
+ * tempting fix is to turn MFA off in development. That would be worse than it
+ * looks — jurisdiction scoping and every audit row's actor derive from the
+ * authenticated identity, so an unauthenticated mode would not be this product
+ * with a step removed. It would be a different one in which none of the controls
+ * can be shown working. The password is still checked; only the second factor is
+ * computed server-side, and only in development.
  */
+/** Matches `scripts/seed_demo.py`, which refuses to run outside development. */
+const DEMO_PASSWORD = "atlas-demo-password";
+
+const DEMO_ACCOUNTS = [
+  { username: "demo.investigator", label: "Investigator", note: "Cases, alerts, complaints" },
+  { username: "demo.auditor", label: "Auditor", note: "The only role with audit:read" },
+] as const;
+
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -22,6 +39,24 @@ export default function LoginPage() {
   const [totp, setTotp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const [demoBusy, setDemoBusy] = useState<string | null>(null);
+
+  async function signInAsDemo(demoUser: string) {
+    setDemoBusy(demoUser);
+    setError(null);
+    try {
+      await demoLogin(demoUser, DEMO_PASSWORD);
+      router.push("/overview");
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 404
+          ? "Demo sign-in is development-only, and this API is not in development mode."
+          : "Demo account not found. Run: python scripts/seed_demo.py",
+      );
+      setDemoBusy(null);
+    }
+  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -119,13 +154,40 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-4 text-[11px] leading-relaxed text-ink-500">
-          Development environment. Seed an account with{" "}
-          <code className="rounded-sm bg-surface px-1 py-0.5 font-mono text-[10px]">
-            python scripts/seed_demo.py
-          </code>{" "}
-          — it prints a username, password and a current authenticator code.
-        </p>
+        {/* Development shortcut. The endpoint behind it is a 404 outside
+            development, so in a deployed build these buttons simply fail — which
+            is the intended behaviour, not a case to handle. */}
+        <div className="mt-5 border-t border-line pt-4">
+          <p className="mb-2.5 text-[10px] font-medium uppercase tracking-wider text-ink-500">
+            Development — skip the code
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {DEMO_ACCOUNTS.map((account) => (
+              <button
+                key={account.username}
+                type="button"
+                onClick={() => void signInAsDemo(account.username)}
+                disabled={demoBusy !== null}
+                className="rounded-sm border border-line bg-surface px-2.5 py-2 text-left transition-colors hover:border-line-strong disabled:opacity-50"
+              >
+                <span className="block text-[12px] font-medium text-ink-900">
+                  {demoBusy === account.username ? "Signing in…" : account.label}
+                </span>
+                <span className="mt-0.5 block text-[10px] leading-snug text-ink-500">
+                  {account.note}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-2.5 text-[10px] leading-relaxed text-ink-500">
+            The password is still checked and the login is still audited — only the
+            authenticator code is computed server-side. Run{" "}
+            <code className="rounded-sm bg-surface px-1 py-0.5 font-mono">
+              python scripts/seed_demo.py
+            </code>{" "}
+            once to create these accounts.
+          </p>
+        </div>
       </div>
     </main>
   );

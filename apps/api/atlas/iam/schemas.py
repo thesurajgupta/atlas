@@ -13,6 +13,17 @@ class LoginRequest(BaseModel):
     totp_code: str | None = Field(default=None, min_length=6, max_length=6)
 
 
+class DemoLoginRequest(BaseModel):
+    """Sign in as a seeded demo account without typing a TOTP code.
+
+    The password is still required and still checked. Only the second factor is
+    supplied by the server, so this carries no credential of its own.
+    """
+
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=256)
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(min_length=1)
 

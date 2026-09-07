@@ -135,6 +135,27 @@ export async function login(
   return getProfile(true);
 }
 
+/**
+ * Sign in as a seeded demo account without typing a TOTP code.
+ *
+ * Development only — the endpoint is a 404 anywhere else, so this button
+ * disappearing in a deployed build is the intended behaviour rather than a bug
+ * to work around. The password is still sent and still verified; the server
+ * only computes the second factor.
+ */
+export async function demoLogin(
+  username: string,
+  password: string,
+): Promise<Profile> {
+  const result = await request<LoginResult>("/api/v1/auth/demo-login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  writeToken(ACCESS_KEY, result.access_token);
+  writeToken(REFRESH_KEY, result.refresh_token);
+  return getProfile(true);
+}
+
 export function getProfile(force = false): Promise<Profile> {
   if (force || profileCache === null) {
     profileCache = request<Profile>("/api/v1/auth/me").catch((err: unknown) => {
