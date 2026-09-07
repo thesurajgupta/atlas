@@ -355,7 +355,7 @@ export default function NewComplaintPage() {
                   id="ifsc"
                   value={ifsc}
                   onChange={(e) => setIfsc(e.target.value)}
-                  placeholder="HDFC0001234"
+                  placeholder="BNKB0001234"
                   maxLength={16}
                   className={`${FIELD} font-mono uppercase`}
                 />
