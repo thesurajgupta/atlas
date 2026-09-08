@@ -87,8 +87,10 @@ export default function NcrpLayout({ children }: { children: React.ReactNode }) 
             prototype; complaints filed here open a case in the ATLAS investigator console.
           </p>
           <p className="mt-1.5">
-            No personal data is transmitted. Everything typed on this screen stays in this browser
-            and can be cleared with <span className="font-medium">Reset demo</span>.
+            A referred complaint sends its reference, category, amount, incident time and
+            description to the ATLAS prototype. Contact details, bank and account references are
+            not sent — they stay in this browser and can be cleared with{" "}
+            <span className="font-medium">Reset demo</span>.
           </p>
         </div>
       </footer>

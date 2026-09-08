@@ -261,8 +261,8 @@ export default function NcrpComplaintForm() {
                   required
                 />
                 <p className={HINT}>
-                  Masked reference is enough. The last four digits are what the money trail is keyed
-                  on.
+                  A masked reference is enough. It is recorded on the complaint and shown back to
+                  you; it is not sent to ATLAS.
                 </p>
               </div>
 
@@ -279,7 +279,8 @@ export default function NcrpComplaintForm() {
                   required
                 />
                 <p className={HINT}>
-                  The reference on the disputed debit. This is the identifier the analysis joins on.
+                  The reference on the disputed debit, as it appears on your statement. Recorded on
+                  the complaint for the investigator to quote back to your bank.
                 </p>
               </div>
             </div>
@@ -302,7 +303,10 @@ export default function NcrpComplaintForm() {
                   onChange={(e) => set('mobile', e.target.value)}
                   placeholder="98XXXXXX21"
                 />
-                <p className={HINT}>Masked by default. Nothing on this form leaves the browser.</p>
+                <p className={HINT}>
+                  Masked by default. Contact details stay in this browser and are never sent to
+                  ATLAS.
+                </p>
               </div>
               <div>
                 <label className={LABEL} htmlFor="state">
