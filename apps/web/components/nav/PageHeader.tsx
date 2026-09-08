@@ -2,7 +2,7 @@
 
 import { Bell, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { auth, getProfile, type Profile } from "@/lib/api";
+import { AUTH_CHANGED, auth, getProfile, type Profile } from "@/lib/api";
 
 /**
  * The bar every page carries: what this page is, a search box, and who is
@@ -33,13 +33,25 @@ export function PageHeader({
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    if (!auth.isSignedIn()) return;
+    // Re-read on every auth change, not only on mount. The demo page signs
+    // itself in after this component has already mounted, and without the
+    // listener the header would stay blank for the rest of the session.
+    //
     // Failure is silent and the block simply does not render. A header that
-    // shows an error because a name could not be fetched would put a red box on
-    // every page for something nobody needs to act on.
-    getProfile()
-      .then(setProfile)
-      .catch(() => undefined);
+    // showed an error because a name could not be fetched would put a red box
+    // on every page for something nobody needs to act on.
+    const load = () => {
+      if (!auth.isSignedIn()) {
+        setProfile(null);
+        return;
+      }
+      getProfile()
+        .then(setProfile)
+        .catch(() => undefined);
+    };
+    load();
+    window.addEventListener(AUTH_CHANGED, load);
+    return () => window.removeEventListener(AUTH_CHANGED, load);
   }, []);
 
   return (

@@ -13,6 +13,7 @@ import {
   ApiError,
   auth,
   createComplaint,
+  demoLogin,
   evaluateAlert,
   getProfile,
   getTrail,
@@ -54,6 +55,10 @@ import { Card, RiskChip } from "@/components/ui/Card";
  * case reference minted in stage one is the reference the alerts page shows in
  * stage six.
  */
+
+/** The seeded development account. See `scripts/seed_demo.py`. */
+const DEMO_USERNAME = "demo.investigator";
+const DEMO_PASSWORD = "atlas-demo-password";
 
 interface Stage {
   key: string;
@@ -99,6 +104,7 @@ export default function DemoPage() {
   const [run, setRun] = useState<DemoRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const cancelled = useRef(false);
 
   // `useDemoRun` rather than a synchronous read in the effect body: the store
@@ -115,10 +121,6 @@ export default function DemoPage() {
     setStates((s) => ({ ...s, [key]: state }));
 
   const start = useCallback(async () => {
-    if (!auth.isSignedIn()) {
-      setError("Sign in first.");
-      return;
-    }
     cancelled.current = false;
     setBusy(true);
     setError(null);
@@ -144,6 +146,19 @@ export default function DemoPage() {
     };
 
     try {
+      // Sign in first if nobody is. Telling a presenter to go and sign in is a
+      // dead end at exactly the wrong moment — the demo account is seeded, the
+      // development-only endpoint exists for this, and every stage below still
+      // runs as an authenticated caller with its own audit trail. Nothing is
+      // bypassed; the sign-in just stops being a manual step.
+      if (!auth.isSignedIn()) {
+        setSigningIn(true);
+        try {
+          await demoLogin(DEMO_USERNAME, DEMO_PASSWORD);
+        } finally {
+          setSigningIn(false);
+        }
+      }
       const profile = await getProfile();
 
       // 1. Complaint — real POST, real observed_at stamp.
@@ -220,11 +235,18 @@ export default function DemoPage() {
       setRun({ ...draft });
       writeRun(draft);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? `${err.message}${err.correlationId ? ` (ref ${err.correlationId.slice(0, 8)})` : ""}`
-          : "The pipeline did not complete.",
-      );
+      if (err instanceof ApiError && (err.status === 404 || err.status === 401)) {
+        setError(
+          "Could not sign in as the demo account. Run `python scripts/seed_demo.py` " +
+            "to create it, or sign in manually from /login.",
+        );
+      } else {
+        setError(
+          err instanceof ApiError
+            ? `${err.message}${err.correlationId ? ` (ref ${err.correlationId.slice(0, 8)})` : ""}`
+            : "The pipeline did not complete.",
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -251,7 +273,8 @@ export default function DemoPage() {
             >
               {busy ? (
                 <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Running…
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  {signingIn ? "Signing in…" : "Running…"}
                 </>
               ) : (
                 <>Run demo investigation</>

@@ -57,6 +57,20 @@ function writeToken(key: string, value: string | null): void {
  */
 let profileCache: Promise<Profile> | null = null;
 
+/**
+ * Fired whenever the signed-in identity changes.
+ *
+ * The header renders on every page and reads the profile once on mount, so a
+ * sign-in that happens *after* that mount — the demo page signing itself in —
+ * would leave the header blank for the rest of the session. Components listen
+ * for this instead of polling.
+ */
+export const AUTH_CHANGED = "atlas:auth-changed";
+
+function announceAuthChange(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_CHANGED));
+}
+
 export const auth = {
   accessToken: () => readToken(ACCESS_KEY),
   isSignedIn: () => readToken(ACCESS_KEY) !== null,
@@ -64,6 +78,7 @@ export const auth = {
     writeToken(ACCESS_KEY, null);
     writeToken(REFRESH_KEY, null);
     profileCache = null;
+    announceAuthChange();
   },
 };
 
@@ -153,6 +168,7 @@ export async function demoLogin(
   });
   writeToken(ACCESS_KEY, result.access_token);
   writeToken(REFRESH_KEY, result.refresh_token);
+  announceAuthChange();
   return getProfile(true);
 }
 
