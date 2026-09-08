@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { CONFIGURED_MAP_STYLE_URL, HAS_CONFIGURED_BASEMAP, buildOfflineStyle } from './map-style';
+import { installMapWorker } from '@/lib/basemap';
 
 const ACCENT_COLOR = { amber: '#fbbf24', sky: '#38bdf8' } as const;
 
@@ -54,7 +55,9 @@ export default function EntityLocationMap({
 
     void (async () => {
       try {
-        const { Map: MapLibreMap } = await import('maplibre-gl');
+        const maplibre = await import('maplibre-gl');
+        installMapWorker(maplibre);
+        const { Map: MapLibreMap } = maplibre;
         if (cancelled) return;
 
         map = new MapLibreMap({

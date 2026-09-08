@@ -4,7 +4,8 @@ import { CaseContextBar } from "@/components/demo/CaseContextBar";
 import { PipelineRail } from "@/components/demo/PipelineRail";
 import { useCaseView } from "@/lib/case-view";
 import { EndpointMap, type MapEndpoint } from "@/components/map/EndpointMap";
-import { listEndpoints, auth, type ApiEndpoint } from "@/lib/api";
+import { listEndpoints, type ApiEndpoint } from "@/lib/api";
+import { useSignedIn } from "@/lib/use-signed-in";
 
 import { PageHeader } from "@/components/nav/PageHeader";
 
@@ -267,12 +268,13 @@ export default function MapPage() {
   // this file's schematic x/y. Fetched once; a failure leaves the map empty
   // rather than the page broken, and the ranked table beside it still works.
   const [registry, setRegistry] = useState<ApiEndpoint[]>([]);
+  const signedIn = useSignedIn();
   useEffect(() => {
-    if (!auth.isSignedIn()) return;
+    if (!signedIn) return;
     listEndpoints()
       .then((r) => setRegistry(r.items))
       .catch(() => setRegistry([]));
-  }, []);
+  }, [signedIn]);
 
   const shown = useMemo(() => endpoints.filter((e) => visible[e.priority]), [endpoints, visible]);
 
@@ -303,11 +305,23 @@ export default function MapPage() {
             : priority === "medium"
               ? "MEDIUM"
               : "LOW") as MapEndpoint["risk"],
+          // On the current case's ranked list. Drawn in its own colour and
+          // given the pulse — "the model ranked this for this case" is a
+          // different statement from "this location carries risk", and an
+          // officer has to be able to tell them apart.
+          predicted: caseView?.candidates.some(
+            (c) => c.endpoint_ref.replace(/\D/g, "") === e.public_ref.replace(/\D/g, ""),
+          ),
           score: local ? local.probability / 100 : undefined,
         };
       })
-      .filter((e) => visible[e.risk.toLowerCase() as Priority]);
-  }, [registry, endpoints, visible]);
+      // A predicted location is never hidden by the risk checkboxes. Those
+      // filter the historical risk bands; a candidate the model produced for
+      // the open case is the reason to be on this page, and silently dropping
+      // it because it happens to sit in an unticked band is how an operator
+      // concludes the prediction produced nothing.
+      .filter((e) => e.predicted || visible[e.risk.toLowerCase() as Priority]);
+  }, [registry, endpoints, visible, caseView]);
   const ranked = useMemo(() => [...shown].sort((a, b) => b.probability - a.probability), [shown]);
   const found = endpoints.find((e) => e.id === selectedId) ?? DEFAULT_ENDPOINT;
 
@@ -396,11 +410,29 @@ export default function MapPage() {
                   {PRIORITY_LABEL[p]}-risk locations
                 </label>
               ))}
+
+              {/* Not a checkbox: predicted candidates are always drawn. The
+                  legend still has to name the colour, or a purple pulsing
+                  marker is an unexplained one. */}
+              {caseView && caseView.candidates.length > 0 && (
+                <div className="mt-1 flex items-center gap-2 border-t border-line pt-1.5 text-[11px] text-ink-700">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ background: "#8B5CF6" }}
+                  />
+                  Predicted cash-out ({caseView.candidates.length})
+                </div>
+              )}
+              <p className="mt-1 text-[10px] leading-snug text-ink-500">
+                Pulsing markers are actionable — predicted, or high risk.
+              </p>
             </div>
           </div>
 
           <p className="border-t border-line px-3 py-2 text-[11px] text-[#5A6E88]">
-            Schematic view — ward geometry and endpoints are illustrative, not a real jurisdiction.
+            OpenStreetMap basemap. Markers sit at the coordinates the endpoint registry
+            carries — endpoints without one, such as a crypto off-ramp, are not drawn
+            rather than placed somewhere plausible.
           </p>
         </section>
 
@@ -438,7 +470,7 @@ export default function MapPage() {
                       <td className="py-2 pr-2 font-medium text-[#DCE6F2]">{e.ref}</td>
                       <td className="py-2 pr-2 text-ink-500">{e.kind}</td>
                       <td className="py-2 pr-2 text-right font-semibold tabular-nums" style={{ color: t.text }}>
-                        {e.probability}%
+                        {e.probability > 0 ? `${e.probability}%` : "not ranked"}
                       </td>
                       <td className="py-2 pr-2">
                         <span
@@ -517,7 +549,7 @@ export default function MapPage() {
                 transform="rotate(-90 50 50)"
               />
               <text x="50" y="50" textAnchor="middle" fill="#E8EEF6" fontSize="21" fontWeight="600" className="tabular-nums">
-                {selected.probability}%
+                {selected.probability > 0 ? `${selected.probability}%` : "—"}
               </text>
               <text x="50" y="64" textAnchor="middle" fill="#7A8CA3" fontSize="8.5">
                 score

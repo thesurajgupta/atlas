@@ -7,5 +7,14 @@ import nextTs from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  // `public/maplibre-gl-*.mjs` is vendor output copied in by
+  // `scripts/copy-maplibre-worker.mjs`, not source. Linting it produces a
+  // thousand warnings about minified code nobody here wrote.
+  globalIgnores([
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "public/maplibre-gl-*.mjs",
+  ]),
 ]);

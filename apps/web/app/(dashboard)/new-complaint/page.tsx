@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight, Check, CheckCircle2, Clock, Loader2, Wand2 } from "lucide-react";
 import {
   ApiError,
-  auth,
   createComplaint,
   FRAUD_TYPOLOGIES,
   getProfile,
   type ApiComplaint,
   type FraudTypology,
 } from "@/lib/api";
+import { useSignedIn } from "@/lib/use-signed-in";
 import { PageHeader } from "@/components/nav/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { syntheticAccount } from "@/lib/synthetic-bank";
@@ -63,6 +63,7 @@ const LABEL = "mb-1 block text-[11px] font-medium uppercase tracking-wider text-
 
 export default function NewComplaintPage() {
   const router = useRouter();
+  const signedIn = useSignedIn();
   const [jurisdiction, setJurisdiction] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,11 +84,11 @@ export default function NewComplaintPage() {
     // bouncing a signed-out presenter away from the first page is the dead end
     // the walkthrough already had to fix. `runInvestigation` signs in on submit;
     // until then the form is fillable and the jurisdiction is resolved lazily.
-    if (!auth.isSignedIn()) return;
+    if (!signedIn) return;
     getProfile()
       .then((p) => setJurisdiction(p.jurisdiction_id))
       .catch(() => setError("Could not read your jurisdiction. Try signing in again."));
-  }, [router]);
+  }, [signedIn]);
 
   // The clock the case is actually racing, shown while typing rather than after
   // submission — it is the number that decides whether this complaint is an

@@ -2,9 +2,11 @@
   "name": "@atlas/web",
   "version": "0.1.0",
   "private": true,
-  "description": "ATLAS investigator interface (spec §25) — Next.js shell, case workspace and uncertainty rendering. Mock data only; no backend dependency.",
+  "description": "ATLAS investigator interface (spec \u00a725) \u2014 Next.js shell, case workspace and uncertainty rendering. Mock data only; no backend dependency.",
   "scripts": {
+    "predev": "node scripts/copy-maplibre-worker.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-maplibre-worker.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

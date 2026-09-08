@@ -24,7 +24,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { basemapKind, buildOsmStyle, CONFIGURED_STYLE_URL } from "@/lib/basemap";
+import { basemapKind, buildOsmStyle, CONFIGURED_STYLE_URL, installMapWorker } from "@/lib/basemap";
 import { buildOfflineStyle } from "@/components/money-trail/map-style";
 
 export interface MapEndpoint {
@@ -34,6 +34,16 @@ export interface MapEndpoint {
   lon: number;
   kind: "ATM" | "Branch" | "Other";
   risk: "HIGH" | "MEDIUM" | "LOW";
+  /**
+   * This endpoint is on the current case's ranked list.
+   *
+   * Its own colour, not a shade of the risk scale: "the model ranked this for
+   * the case in front of you" and "this location carries historical risk" are
+   * different claims, and an operator has to be able to tell them apart at a
+   * glance. A high-risk ATM nobody predicted is not the same instruction as a
+   * predicted one.
+   */
+  predicted?: boolean;
   /** Relative model score, not a probability. Shown as-is where shown. */
   score?: number;
   rank?: number;
@@ -44,6 +54,21 @@ const RISK_FILL: Record<MapEndpoint["risk"], string> = {
   MEDIUM: "#E5A23D",
   LOW: "#3E9B6D",
 };
+
+/** Predicted cash-out. Distinct hue, so it cannot be read as a risk band. */
+const PREDICTED_FILL = "#8B5CF6";
+
+/**
+ * Which markers pulse.
+ *
+ * Only the two that are actionable: a predicted cash-out, and a high-risk
+ * endpoint. Everything pulsing is the same as nothing pulsing — the effect is
+ * spent on the markers an officer is meant to move towards, and the ordinary
+ * ATMs stay small and quiet so those two are findable in a dense district.
+ */
+function isActionable(e: MapEndpoint): boolean {
+  return e.predicted === true || e.risk === "HIGH";
+}
 
 const KIND_STROKE: Record<MapEndpoint["kind"], string> = {
   ATM: "#E8EEF6",
@@ -87,6 +112,7 @@ export function EndpointMap({
     void (async () => {
       try {
         const maplibre = await import("maplibre-gl");
+        installMapWorker(maplibre);
         if (cancelled) return;
 
         const withCoords = endpoints.filter(
@@ -153,10 +179,13 @@ export function EndpointMap({
         properties: {
           id: e.id,
           label: e.label,
-          fill: RISK_FILL[e.risk],
+          fill: e.predicted ? PREDICTED_FILL : RISK_FILL[e.risk],
           stroke: KIND_STROKE[e.kind],
           selected: e.id === selectedId ? 1 : 0,
-          radius: e.id === selectedId ? 9 : 6,
+          actionable: isActionable(e) ? 1 : 0,
+          // Ordinary ATMs and branches stay small. A map where every marker
+          // shouts is one where the two that matter are invisible.
+          radius: e.id === selectedId ? 9 : isActionable(e) ? 6.5 : 3.5,
         },
         geometry: { type: "Point" as const, coordinates: [e.lon, e.lat] },
       })),
@@ -169,6 +198,24 @@ export function EndpointMap({
       existing.setData(data);
     } else {
       map.addSource("endpoints", { type: "geojson", data });
+
+      // The halo sits *under* the dots and only draws for actionable markers.
+      // Its radius and opacity are animated below; keeping it a separate layer
+      // means the dot itself never moves, so a marker cannot drift off its own
+      // coordinate while it pulses.
+      map.addLayer({
+        id: "endpoint-pulse",
+        type: "circle",
+        source: "endpoints",
+        filter: ["==", ["get", "actionable"], 1],
+        paint: {
+          "circle-radius": 8,
+          "circle-color": ["get", "fill"],
+          "circle-opacity": 0.35,
+          "circle-blur": 0.5,
+        },
+      });
+
       map.addLayer({
         id: "endpoint-dot",
         type: "circle",
@@ -207,6 +254,37 @@ export function EndpointMap({
       );
     }
   }, [endpoints, selectedId, ready]);
+
+  // The pulse.
+  //
+  // Driven by rAF rather than CSS, because the markers are style layers inside
+  // the WebGL canvas — there is no DOM node to animate. Paused for
+  // `prefers-reduced-motion`, where the halo simply stays at its resting size:
+  // the marker is still larger and still coloured, so nothing is only
+  // communicated by movement.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map === null || !ready) return;
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
+
+    let frame = 0;
+    const start = performance.now();
+
+    const tick = (now: number) => {
+      // ~1.6s period. Slow enough to read as a beacon rather than a flicker.
+      const phase = ((now - start) % 1600) / 1600;
+      const eased = Math.sin(phase * Math.PI);
+      if (map.getLayer("endpoint-pulse")) {
+        map.setPaintProperty("endpoint-pulse", "circle-radius", 8 + eased * 10);
+        map.setPaintProperty("endpoint-pulse", "circle-opacity", 0.34 - eased * 0.26);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [ready]);
 
   return (
     <div className={`relative ${className}`}>

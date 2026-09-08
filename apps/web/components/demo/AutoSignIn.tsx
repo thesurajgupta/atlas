@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { auth, demoLogin } from "@/lib/api";
+import { AUTH_CHANGED, auth, demoLogin } from "@/lib/api";
 
 /**
  * Sign the console in, once, if nobody is.
@@ -26,17 +26,32 @@ const DEMO_USERNAME = "demo.investigator";
 const DEMO_PASSWORD = "atlas-demo-password";
 
 export function AutoSignIn() {
-  // One attempt per mount. Without the guard a failing endpoint would be
-  // retried on every navigation for the life of the session.
-  const attempted = useRef(false);
+  // Stops once the endpoint has actually refused us — deployed, or the account
+  // is not seeded — rather than retrying a 404 on every auth change. A refusal
+  // is a standing answer; an expired token is not.
+  const refused = useRef(false);
+  const inFlight = useRef(false);
 
   useEffect(() => {
-    if (attempted.current || auth.isSignedIn()) return;
-    attempted.current = true;
-    void demoLogin(DEMO_USERNAME, DEMO_PASSWORD).catch(() => {
-      // Deployed, or the account is not seeded. Either way the pages fall back
-      // to their own signed-out handling.
-    });
+    const signIn = () => {
+      if (refused.current || inFlight.current || auth.isSignedIn()) return;
+      inFlight.current = true;
+      void demoLogin(DEMO_USERNAME, DEMO_PASSWORD)
+        .catch(() => {
+          refused.current = true;
+        })
+        .finally(() => {
+          inFlight.current = false;
+        });
+    };
+
+    signIn();
+    // Access tokens expire, and a refresh that cannot be rotated clears the
+    // session. Without this the console would sit signed out until someone
+    // reloaded — every page drawing its empty state, which reads as "no data"
+    // rather than "signed out". Signing in again is the honest recovery.
+    window.addEventListener(AUTH_CHANGED, signIn);
+    return () => window.removeEventListener(AUTH_CHANGED, signIn);
   }, []);
 
   return null;

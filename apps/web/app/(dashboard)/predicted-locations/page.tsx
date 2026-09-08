@@ -6,7 +6,8 @@ import { CaseContextBar } from '@/components/demo/CaseContextBar';
 import { PipelineRail } from '@/components/demo/PipelineRail';
 import { useCaseView } from '@/lib/case-view';
 import { EndpointMap, type MapEndpoint } from '@/components/map/EndpointMap';
-import { listEndpoints, auth, type ApiEndpoint } from '@/lib/api';
+import { listEndpoints, type ApiEndpoint } from '@/lib/api';
+import { useSignedIn } from '@/lib/use-signed-in';
 import {
   Search,
   Bell,
@@ -142,12 +143,13 @@ export default function PredictedLocationsDashboard() {
   // from the case. Joined on the endpoint reference so the marker a judge
   // clicks is the row they were just reading.
   const [registry, setRegistry] = useState<ApiEndpoint[]>([]);
+  const signedIn = useSignedIn();
   useEffect(() => {
-    if (!auth.isSignedIn()) return;
+    if (!signedIn) return;
     listEndpoints()
       .then((r) => setRegistry(r.items))
       .catch(() => setRegistry([]));
-  }, []);
+  }, [signedIn]);
 
   const [pinned, setPinned] = useState<(typeof PREDICTED_LOCATIONS_DATA)[0] | null>(null);
   // Falls back to the top-ranked location of whatever list is active, so a demo

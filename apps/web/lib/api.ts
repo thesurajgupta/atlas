@@ -82,7 +82,58 @@ export const auth = {
   },
 };
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/**
+ * Rotate the access token, at most once at a time.
+ *
+ * Access tokens are short-lived, and a console left open across a coffee break
+ * outlives one. Without this the whole session degrades in the quietest
+ * possible way: `isSignedIn()` still says yes because a token is present, every
+ * request comes back 401, and each page draws its empty state — a map with no
+ * markers, a queue with no alerts — as though the data simply were not there.
+ *
+ * Single-flight, because a page mounts several fetches at once and six parallel
+ * rotations would invalidate each other: refresh tokens rotate on use, and the
+ * API treats a reused one as theft and revokes the family.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = readToken(REFRESH_KEY);
+  if (refreshToken === null) return false;
+
+  // Held locally as well: the promise clears the shared slot when it settles,
+  // and returning the slot itself could hand back the null it just wrote.
+  const pending = (refreshInFlight ??= (async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!response.ok) {
+        // The refresh token is spent or revoked. Clear both, so `AutoSignIn`
+        // sees a signed-out console and signs in again rather than looping on
+        // a credential that will never work.
+        auth.clear();
+        return false;
+      }
+      const result = (await response.json()) as LoginResult;
+      writeToken(ACCESS_KEY, result.access_token);
+      writeToken(REFRESH_KEY, result.refresh_token);
+      profileCache = null;
+      announceAuthChange();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })());
+
+  return pending;
+}
+
+async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const token = readToken(ACCESS_KEY);
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
@@ -95,6 +146,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     // A network-level failure here is almost always the API not running, so
     // say that rather than surfacing "Failed to fetch".
     throw new ApiError(0, `Cannot reach the ATLAS API at ${API_BASE}. Is it running?`);
+  }
+
+  // Rotate and replay once. Only for an expired token on a request that carried
+  // one — a 401 from `/auth/login` is a wrong password, and retrying it would
+  // turn one bad attempt into two against the lockout counter.
+  if (response.status === 401 && retry && token !== null && !path.startsWith("/api/v1/auth/")) {
+    if (await refreshAccessToken()) return request<T>(path, init, false);
   }
 
   const correlationId = response.headers.get("X-Correlation-Id");

@@ -2,3 +2,7 @@ node_modules/
 .next/
 out/
 *.tsbuildinfo
+
+# Vendored by scripts/copy-maplibre-worker.mjs at the installed version.
+public/maplibre-gl-worker.mjs
+public/maplibre-gl-shared.mjs

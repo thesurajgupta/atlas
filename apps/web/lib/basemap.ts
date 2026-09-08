@@ -88,3 +88,27 @@ export function buildOsmStyle(): StyleSpecification {
     ],
   };
 }
+
+/**
+ * Point MapLibre at a worker URL that resolves.
+ *
+ * MapLibre 6 works out where its worker lives from the `import.meta.url` of the
+ * chunk the bundler put it in, and asks for `./maplibre-gl-worker.mjs` beside
+ * it. Under Next that chunk sits in `/_next/static/chunks/`, which has no such
+ * file, so the request 404s and the worker never starts.
+ *
+ * The failure looks like success, which is why it is worth a comment: raster
+ * tiles decode on the main thread, so the basemap draws normally. GeoJSON is
+ * tiled in the worker, so every marker layer in the console silently stays
+ * empty — a map that looks fine and shows nothing.
+ *
+ * `scripts/copy-maplibre-worker.mjs` copies the worker into `public/` before
+ * `dev` and `build`; this points MapLibre at that copy. Idempotent, so every
+ * map component can call it without coordinating.
+ */
+export function installMapWorker(maplibre: typeof import("maplibre-gl")): void {
+  if (maplibre.getWorkerUrl() === WORKER_URL) return;
+  maplibre.setWorkerUrl(WORKER_URL);
+}
+
+const WORKER_URL = "/maplibre-gl-worker.mjs";
