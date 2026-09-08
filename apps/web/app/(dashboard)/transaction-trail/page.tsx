@@ -2,6 +2,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import { CaseContextBar } from '@/components/demo/CaseContextBar';
+import { PipelineRail } from '@/components/demo/PipelineRail';
+import { useCaseView, formatRupees } from '@/lib/case-view';
 
 import {
   Search,
@@ -158,15 +161,73 @@ const TRAIL_DATASETS = [
   }
 ];
 
+/**
+ * The active case, in the shape this page already renders.
+ *
+ * The flowchart below is unchanged — only where its data comes from. Four
+ * fields the fixture carried are **not in the graph**: bank, account holder, IP
+ * and location. They are rendered as "—" rather than filled with something
+ * plausible, because an invented account holder is exactly what makes a demo
+ * look real and be false. When bank feeds land (#65) they populate here.
+ */
+function trailFromCase(view: NonNullable<ReturnType<typeof useCaseView>>) {
+  const byId = new Map(view.nodes.map((n) => [n.id, n]));
+  const nodes = view.nodes.map((n) => ({
+    id: n.id,
+    role:
+      n.role === "VICTIM"
+        ? "Victim Account"
+        : n.role === "TERMINAL"
+          ? "Terminal Account"
+          : "Mule Account",
+    type:
+      n.role === "VICTIM" ? "Source" : n.role === "TERMINAL" ? "Sink" : "Intermediary",
+    bank: "—",
+    accNo: n.label,
+    holder: "—",
+    amount: formatRupees(n.received),
+    time: n.firstSeen
+      ? new Date(n.firstSeen).toLocaleString("en-IN", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : "—",
+    ip: "—",
+    // Depth is the only risk signal the graph supports on its own: the further
+    // from the victim, the closer to a cash-out. Not a model score.
+    risk: n.role === "TERMINAL" ? "Critical" : n.role === "VICTIM" ? "Low" : "High",
+    location: "—",
+  }));
+  void byId;
+  return {
+    trailId: view.caseRef,
+    caseTitle: `${view.typology.replace(/_/g, " ").toLowerCase()} — reconstructed trail`,
+    totalFlow: formatRupees(view.totalMoved),
+    status: view.alertSeverity ?? "Under review",
+    nodes,
+  };
+}
+
 export default function TransactionTrailPage() {
+  const caseView = useCaseView();
+
   // --- STATE MANAGEMENT ---
   const [activeTrailIndex, setActiveTrailIndex] = useState(0);
-  const currentTrail = TRAIL_DATASETS[activeTrailIndex]!;  // index is clamped to the array below
+  // The active case when there is one, the fixture otherwise. Falling back keeps
+  // the page usable on its own; it does not get to disagree with the case.
+  const currentTrail = caseView
+    ? trailFromCase(caseView)
+    : TRAIL_DATASETS[activeTrailIndex]!;
 
   // Selected Node State for Detail Side-Panel
-  const [selectedNode, setSelectedNode] = useState<(typeof currentTrail)["nodes"][0] | null>(
-    currentTrail.nodes[1]!
-  );
+  const [selectedNode, setSelectedNode] = useState<
+    (typeof currentTrail)["nodes"][0] | null
+  >(null);
+
+  // Default to the second node — the first hop the money took — but only once a
+  // trail exists. Deriving it in state would pin the fixture's node even after a
+  // demo run replaced the trail underneath it.
+  const shownNode = selectedNode ?? currentTrail.nodes[1] ?? currentTrail.nodes[0] ?? null;
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -243,6 +304,8 @@ export default function TransactionTrailPage() {
             </div>
           </div>
         </header>
+        <CaseContextBar stage="Transaction trail" />
+        <PipelineRail current="Transactions" />
 
         <p className="mx-6 mt-4 rounded-md border border-line bg-surface px-3 py-2 text-[11px] italic text-ink-500">
           Mock trail for interface development. Synthetic accounts and amounts only.
@@ -392,7 +455,7 @@ export default function TransactionTrailPage() {
                       <div
                         onClick={() => handleSelectNode(sourceNode)}
                         className={`w-80 bg-paper border rounded-xl p-4 cursor-pointer transition-all space-y-2 relative ${
-                          selectedNode?.id === sourceNode.id
+                          shownNode?.id === sourceNode.id
                             ? 'border-blue-500 ring-2 ring-blue-500/30 shadow-xl shadow-blue-950/50'
                             : 'border-line hover:border-line-strong'
                         }`}
@@ -430,7 +493,7 @@ export default function TransactionTrailPage() {
                       <div
                         onClick={() => handleSelectNode(muleNode)}
                         className={`w-80 bg-paper border rounded-xl p-4 cursor-pointer transition-all space-y-2 relative ${
-                          selectedNode?.id === muleNode.id
+                          shownNode?.id === muleNode.id
                             ? 'border-blue-500 ring-2 ring-blue-500/30 shadow-xl shadow-blue-950/50'
                             : 'border-rose-500/40 hover:border-rose-500'
                         } ${freezeStatus[muleNode.id] ? 'opacity-60 bg-rose-950/10' : ''}`}
@@ -482,7 +545,7 @@ export default function TransactionTrailPage() {
                           key={splitNode.id}
                           onClick={() => handleSelectNode(splitNode)}
                           className={`bg-paper border rounded-xl p-4 cursor-pointer transition-all space-y-2 relative ${
-                            selectedNode?.id === splitNode.id
+                            shownNode?.id === splitNode.id
                               ? 'border-blue-500 ring-2 ring-blue-500/30 shadow-xl'
                               : 'border-line hover:border-line-strong'
                           }`}
@@ -523,7 +586,7 @@ export default function TransactionTrailPage() {
                           key={sinkNode.id}
                           onClick={() => handleSelectNode(sinkNode)}
                           className={`bg-paper border rounded-xl p-4 cursor-pointer transition-all space-y-2 ${
-                            selectedNode?.id === sinkNode.id
+                            shownNode?.id === sinkNode.id
                               ? 'border-blue-500 ring-2 ring-blue-500/30 shadow-xl'
                               : 'border-rose-900/40 hover:border-rose-500/60'
                           }`}
@@ -559,21 +622,21 @@ export default function TransactionTrailPage() {
 
             {/* Right Column: Node Details & Legal Action Inspector */}
             <div className="lg:col-span-4 bg-paper border border-line rounded-xl p-5 space-y-5 flex flex-col justify-between h-full min-h-[560px]">
-              {selectedNode ? (
+              {shownNode ? (
                 <>
                   <div className="space-y-4">
                     {/* Panel Header */}
                     <div className="border-b border-line pb-3 flex items-center justify-between">
                       <div>
                         <span className="text-[10px] font-mono text-blue-400 font-bold">
-                          {selectedNode.id}
+                          {shownNode.id}
                         </span>
                         <h3 className="font-bold text-ink-900 text-base leading-tight">
                           Node Inspector Details
                         </h3>
                       </div>
-                      <span className={`text-xs px-2.5 py-0.5 rounded border ${getRiskBadge(selectedNode.risk)}`}>
-                        {selectedNode.risk} Risk
+                      <span className={`text-xs px-2.5 py-0.5 rounded border ${getRiskBadge(shownNode.risk)}`}>
+                        {shownNode.risk} Risk
                       </span>
                     </div>
 
@@ -581,35 +644,35 @@ export default function TransactionTrailPage() {
                     <div className="space-y-2.5 text-xs">
                       <div className="bg-paper p-3 rounded-lg border border-line space-y-1">
                         <span className="text-ink-500 text-[10px]">Account Holder / Entity Name</span>
-                        <p className="font-bold text-ink-900 text-sm">{selectedNode.holder}</p>
+                        <p className="font-bold text-ink-900 text-sm">{shownNode.holder}</p>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <div className="bg-paper p-2.5 rounded-lg border border-line space-y-0.5">
                           <span className="text-ink-500 text-[10px]">Banking Gateway</span>
-                          <p className="font-medium text-ink-700 truncate">{selectedNode.bank}</p>
+                          <p className="font-medium text-ink-700 truncate">{shownNode.bank}</p>
                         </div>
                         <div className="bg-paper p-2.5 rounded-lg border border-line space-y-0.5">
                           <span className="text-ink-500 text-[10px]">Account Identifier</span>
-                          <p className="font-mono text-blue-400 truncate">{selectedNode.accNo}</p>
+                          <p className="font-mono text-blue-400 truncate">{shownNode.accNo}</p>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <div className="bg-paper p-2.5 rounded-lg border border-line space-y-0.5">
                           <span className="text-ink-500 text-[10px]">Sequenced Flow Amount</span>
-                          <p className="font-bold text-rose-400 font-mono">{selectedNode.amount}</p>
+                          <p className="font-bold text-rose-400 font-mono">{shownNode.amount}</p>
                         </div>
                         <div className="bg-paper p-2.5 rounded-lg border border-line space-y-0.5">
                           <span className="text-ink-500 text-[10px]">Timestamp</span>
-                          <p className="font-medium text-ink-700 text-[11px]">{selectedNode.time}</p>
+                          <p className="font-medium text-ink-700 text-[11px]">{shownNode.time}</p>
                         </div>
                       </div>
 
                       <div className="bg-paper p-3 rounded-lg border border-line space-y-1">
                         <span className="text-ink-500 text-[10px]">IP Vector / Geographical Marker</span>
-                        <p className="font-medium text-ink-700">{selectedNode.ip}</p>
-                        <p className="text-[10px] text-ink-500">{selectedNode.location}</p>
+                        <p className="font-medium text-ink-700">{shownNode.ip}</p>
+                        <p className="text-[10px] text-ink-500">{shownNode.location}</p>
                       </div>
                     </div>
                   </div>
@@ -621,14 +684,14 @@ export default function TransactionTrailPage() {
                     <button
                       onClick={() => setIsFreezeModalOpen(true)}
                       className={`w-full py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-all ${
-                        freezeStatus[selectedNode.id]
+                        freezeStatus[shownNode.id]
                           ? 'bg-emerald-600 hover:bg-emerald-500 text-ink-900'
                           : 'bg-rose-600 hover:bg-rose-500 text-ink-900 shadow-lg shadow-rose-950/30'
                       }`}
                     >
                       <Shield className="w-4 h-4" />
                       <span>
-                        {freezeStatus[selectedNode.id]
+                        {freezeStatus[shownNode.id]
                           ? 'Unfreeze Account Hold'
                           : 'Issue Emergency Lien / Freeze'}
                       </span>
@@ -652,7 +715,7 @@ export default function TransactionTrailPage() {
       </div>
 
       {/* Emergency Freeze Modal */}
-      {isFreezeModalOpen && selectedNode && (
+      {isFreezeModalOpen && shownNode && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-paper border border-line rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-line pb-3">
@@ -671,14 +734,14 @@ export default function TransactionTrailPage() {
             <div className="space-y-3 text-xs text-ink-700">
               <p>
                 You are about to issue an automated emergency freeze order to{' '}
-                <strong className="text-ink-900">{selectedNode.bank}</strong> for account{' '}
-                <strong className="text-blue-400 font-mono">{selectedNode.accNo}</strong> under IT Act Section 91.
+                <strong className="text-ink-900">{shownNode.bank}</strong> for account{' '}
+                <strong className="text-blue-400 font-mono">{shownNode.accNo}</strong> under IT Act Section 91.
               </p>
 
               <div className="bg-paper p-3 rounded-lg border border-line space-y-1">
                 <span className="text-ink-500 text-[10px]">Target Account Holder</span>
-                <p className="font-bold text-ink-900">{selectedNode.holder}</p>
-                <span className="text-ink-500 text-[10px]">Flow Exposure: {selectedNode.amount}</span>
+                <p className="font-bold text-ink-900">{shownNode.holder}</p>
+                <span className="text-ink-500 text-[10px]">Flow Exposure: {shownNode.amount}</span>
               </div>
             </div>
 
@@ -690,7 +753,7 @@ export default function TransactionTrailPage() {
                 Cancel
               </button>
               <button
-                onClick={() => handleToggleFreeze(selectedNode.id)}
+                onClick={() => handleToggleFreeze(shownNode.id)}
                 className="px-4 py-2 rounded-lg bg-rose-600 text-ink-900 hover:bg-rose-500 font-semibold"
               >
                 Confirm & Issue Order

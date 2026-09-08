@@ -1,10 +1,14 @@
 "use client";
 
-import { ActiveRunBanner } from "@/components/demo/ActiveRunBanner";
+import { CaseContextBar } from "@/components/demo/CaseContextBar";
+import { PipelineRail } from "@/components/demo/PipelineRail";
+import { useCaseView } from "@/lib/case-view";
+import { EndpointMap, type MapEndpoint } from "@/components/map/EndpointMap";
+import { listEndpoints, auth, type ApiEndpoint } from "@/lib/api";
 
 import { PageHeader } from "@/components/nav/PageHeader";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * ATM / branch cash-out map (spec §24, §25.1, issue #8).
@@ -227,12 +231,85 @@ function Stat({ icon, tone, value, label }: { icon: string; tone: string; value:
 }
 
 export default function MapPage() {
+  const caseView = useCaseView();
   const [selectedId, setSelectedId] = useState(DEFAULT_ENDPOINT.id);
   const [visible, setVisible] = useState<Record<Priority, boolean>>({ high: true, medium: true, low: true });
 
-  const shown = useMemo(() => ENDPOINTS.filter((e) => visible[e.priority]), [visible]);
+  // When a case is active its scores win. The schematic positions only exist in
+  // this fixture — the endpoint registry has real lat/lon and no ward geometry —
+  // so the map keeps its own layout and takes the *ranking* from the case. That
+  // is what stops this page and /predicted-locations disagreeing about which
+  // endpoint is first, which was the whole problem.
+  //
+  // Matched on the numeric part of the reference: this fixture uses
+  // `EP_DEL_0783`, the API returns `EP-0783`.
+  const endpoints = useMemo(() => {
+    if (!caseView) return ENDPOINTS;
+    const scored = new Map(
+      caseView.candidates.map((c) => [c.endpoint_ref.replace(/\D/g, ""), c]),
+    );
+    return ENDPOINTS.map((e) => {
+      const match = scored.get(e.id.replace(/\D/g, ""));
+      if (!match) return { ...e, probability: 0, priority: "low" as Priority };
+      return {
+        ...e,
+        probability: Math.round(match.score * 100),
+        priority: (match.risk === "HIGH"
+          ? "high"
+          : match.risk === "MEDIUM"
+            ? "medium"
+            : "low") as Priority,
+      };
+    });
+  }, [caseView]);
+
+  // Real coordinates for the map, from the endpoint registry rather than from
+  // this file's schematic x/y. Fetched once; a failure leaves the map empty
+  // rather than the page broken, and the ranked table beside it still works.
+  const [registry, setRegistry] = useState<ApiEndpoint[]>([]);
+  useEffect(() => {
+    if (!auth.isSignedIn()) return;
+    listEndpoints()
+      .then((r) => setRegistry(r.items))
+      .catch(() => setRegistry([]));
+  }, []);
+
+  const shown = useMemo(() => endpoints.filter((e) => visible[e.priority]), [endpoints, visible]);
+
+  // Scores come from the same place the ranked table reads, matched on the
+  // numeric part of the reference — this page's ids are `EP_DEL_0783`, the API
+  // returns `EP-0783`. One source, so the map and the table cannot disagree
+  // about which endpoint is first.
+  const mapEndpoints = useMemo<MapEndpoint[]>(() => {
+    const scored = new Map(endpoints.map((e) => [e.id.replace(/\D/g, ""), e]));
+    return registry
+      .filter((e) => e.is_geolocatable && e.lat !== null && e.lon !== null)
+      .map((e) => {
+        const local = scored.get(e.public_ref.replace(/\D/g, ""));
+        const priority = local?.priority ?? "low";
+        return {
+          id: local?.id ?? e.public_ref,
+          label: `${e.public_ref} · ${e.operator}`,
+          lat: e.lat as number,
+          lon: e.lon as number,
+          kind:
+            e.channel === "ATM"
+              ? ("ATM" as const)
+              : e.channel === "BANK_BRANCH"
+                ? ("Branch" as const)
+                : ("Other" as const),
+          risk: (priority === "high"
+            ? "HIGH"
+            : priority === "medium"
+              ? "MEDIUM"
+              : "LOW") as MapEndpoint["risk"],
+          score: local ? local.probability / 100 : undefined,
+        };
+      })
+      .filter((e) => visible[e.risk.toLowerCase() as Priority]);
+  }, [registry, endpoints, visible]);
   const ranked = useMemo(() => [...shown].sort((a, b) => b.probability - a.probability), [shown]);
-  const selected = ENDPOINTS.find((e) => e.id === selectedId) ?? DEFAULT_ENDPOINT;
+  const selected = endpoints.find((e) => e.id === selectedId) ?? DEFAULT_ENDPOINT;
   const tone = TONE[selected.priority];
 
   const circ = 2 * Math.PI * 42;
@@ -254,7 +331,8 @@ export default function MapPage() {
           </>
         }
       />
-      <ActiveRunBanner />
+      <CaseContextBar stage="ATM / branch map" />
+      <PipelineRail current="Prediction" />
       <div className="px-5 py-5 text-ink-900">
       {/* ---------------- stat row ---------------- */}
       <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
@@ -268,66 +346,17 @@ export default function MapPage() {
       {/* ---------------- map + ranked list ---------------- */}
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <section className="relative overflow-hidden rounded-lg border border-line bg-surface">
-          <svg
-            viewBox="0 0 420 268"
-            className="w-full"
-            role="img"
-            aria-label="Schematic ward map with the last confirmed transaction hop, distance rings at 2, 5 and 10 kilometres, and candidate cash-out endpoints coloured by risk level."
-          >
-            <rect x="0" y="0" width="420" height="268" fill="#0D1724" />
-            <g fill="#152436" stroke="#22354C" strokeWidth="1">
-              {WARDS.map((d) => (
-                <path key={d} d={d} />
-              ))}
-            </g>
-            <g fill="#5A6E88" fontSize="7.5" fontFamily="ui-monospace, monospace" letterSpacing="0.5">
-              <text x="84" y="54">WARD 3</text>
-              <text x="220" y="52">WARD 4</text>
-              <text x="342" y="56">WARD 7</text>
-              <text x="34" y="158">WARD 9</text>
-              <text x="118" y="148">WARD 12</text>
-              <text x="246" y="136">WARD 5</text>
-            </g>
-
-            <g fill="none" stroke="#3E7BC4" strokeWidth="0.9" opacity="0.55" strokeDasharray="4 4">
-              <circle cx="196" cy="130" r="44" />
-              <circle cx="196" cy="130" r="82" />
-              <circle cx="196" cy="130" r="118" />
-            </g>
-            <g fill="#4A8CD4" fontSize="7.5" fontFamily="ui-monospace, monospace">
-              <text x="200" y="84">2 km</text>
-              <text x="200" y="46">5 km</text>
-              <text x="200" y="9">10 km</text>
-            </g>
-
-            <circle cx="196" cy="130" r="4.5" fill="#4A8CD4" />
-            <circle cx="196" cy="130" r="10" fill="none" stroke="#4A8CD4" strokeWidth="1.2" />
-            <text x="196" y="152" textAnchor="middle" fill="#4A8CD4" fontSize="7.5" fontFamily="ui-monospace, monospace">
-              last confirmed hop
-            </text>
-
-            {shown.map((e) => {
-              const t = TONE[e.priority];
-              const sel = e.id === selected.id;
-              return (
-                <g
-                  key={e.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`${e.ref}, ${PRIORITY_LABEL[e.priority]} risk`}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => setSelectedId(e.id)}
-                  onKeyDown={(ev) => {
-                    if (ev.key === "Enter" || ev.key === " ") setSelectedId(e.id);
-                  }}
-                >
-                  {sel && <circle cx={e.x} cy={e.y} r="14" fill="none" stroke="#E8EEF6" strokeWidth="1.4" />}
-                  <circle cx={e.x} cy={e.y} r={e.priority === "low" ? 6.5 : 9} fill={t.dot} opacity="0.28" />
-                  <circle cx={e.x} cy={e.y} r={e.priority === "low" ? 4 : 5.5} fill={t.dot} />
-                </g>
-              );
-            })}
-          </svg>
+          {/* A real projection with real coordinates, in place of the ward
+              schematic. The endpoints come from `GET /api/v1/geo/endpoints`,
+              so a marker only appears where the registry actually has a
+              latitude and longitude — a crypto off-ramp has no physical
+              place and is absent rather than given a plausible one. */}
+          <EndpointMap
+            endpoints={mapEndpoints}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            className="h-[340px] w-full"
+          />
 
           {/* legend overlay, as in the design */}
           <div className="absolute left-3 top-3 rounded-lg border border-[#22354C] bg-[#0A1420]/95 p-2.5 backdrop-blur">

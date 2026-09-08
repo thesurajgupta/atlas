@@ -1,8 +1,12 @@
 // app/predicted-locations/page.tsx
 'use client';
 
-import React, { useState } from 'react';
-import { ActiveRunBanner } from '@/components/demo/ActiveRunBanner';
+import React, { useEffect, useState } from 'react';
+import { CaseContextBar } from '@/components/demo/CaseContextBar';
+import { PipelineRail } from '@/components/demo/PipelineRail';
+import { useCaseView } from '@/lib/case-view';
+import { EndpointMap, type MapEndpoint } from '@/components/map/EndpointMap';
+import { listEndpoints, auth, type ApiEndpoint } from '@/lib/api';
 import {
   Search,
   Bell,
@@ -91,14 +95,87 @@ const PREDICTED_LOCATIONS_DATA = [
   }
 ];
 
+/**
+ * The active case's ranked candidates, in the shape this page renders.
+ *
+ * The scores are the ones the run produced, so the #1 candidate here is the #1
+ * on the walkthrough, on the map and in the alert. Coordinates and nearby units
+ * are not in the endpoint registry, so they are absent rather than invented.
+ */
+function locationsFromCase(view: NonNullable<ReturnType<typeof useCaseView>>) {
+  const windowLabel =
+    view.windowStart && view.windowEnd
+      ? `${new Date(view.windowStart).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} – ${new Date(view.windowEnd).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+      : 'not predicted';
+
+  return view.candidates.map((c) => ({
+    id: c.endpoint_ref,
+    zoneName: `${c.endpoint_ref} · ${c.operator}`,
+    city: c.channel.replace(/_/g, ' ').toLowerCase(),
+    coordinates: { lat: 0, lng: 0, grid: 'not published' },
+    threatLevel: c.risk === 'HIGH' ? 'Critical' : c.risk === 'MEDIUM' ? 'High' : 'Moderate',
+    // A rank expressed as a score, not a calibrated probability. The label
+    // beside it says so.
+    probabilityScore: c.score.toFixed(2),
+    predictedTimeframe: windowLabel,
+    predictedActivity: `Cash-out via ${c.channel.replace(/_/g, ' ').toLowerCase()}`,
+    associatedCase: view.caseRef,
+    targetATMCount: 1,
+    historicalMatch: 'not computed — no trained ranker',
+    description:
+      `Ranked #${c.rank} of ${view.candidates.length} for ${view.caseRef}. Relative model score, not a probability.`,
+    surveillanceStatus: view.alertSeverity ? `Alert ${view.alertSeverity}` : 'No alert raised',
+    nearbyUnits: [] as string[],
+  }));
+}
+
 export default function PredictedLocationsDashboard() {
+  const caseView = useCaseView();
   // --- STATE MANAGEMENT ---
-  const [locations, setLocations] = useState(PREDICTED_LOCATIONS_DATA);
+  // The active case when there is one, the fixture otherwise.
+  const fixture = useState(PREDICTED_LOCATIONS_DATA)[0];
+  const caseLocations = caseView ? locationsFromCase(caseView) : null;
+  const locations = (caseLocations ?? fixture) as typeof PREDICTED_LOCATIONS_DATA;
   // `!` throughout this file: `noUncheckedIndexedAccess` is on, and these are
   // module-level literals that are never emptied, so the element does exist.
-  const [selectedLocation, setSelectedLocation] = useState<(typeof PREDICTED_LOCATIONS_DATA)[0]>(
-    PREDICTED_LOCATIONS_DATA[0]!
-  );
+  // Real coordinates come from the endpoint registry; the ranked scores come
+  // from the case. Joined on the endpoint reference so the marker a judge
+  // clicks is the row they were just reading.
+  const [registry, setRegistry] = useState<ApiEndpoint[]>([]);
+  useEffect(() => {
+    if (!auth.isSignedIn()) return;
+    listEndpoints()
+      .then((r) => setRegistry(r.items))
+      .catch(() => setRegistry([]));
+  }, []);
+
+  const [pinned, setPinned] = useState<(typeof PREDICTED_LOCATIONS_DATA)[0] | null>(null);
+  // Falls back to the top-ranked location of whatever list is active, so a demo
+  // run replacing the list underneath does not leave a fixture row selected.
+  const selectedLocation = (pinned ?? locations[0] ?? PREDICTED_LOCATIONS_DATA[0]!) as
+    (typeof PREDICTED_LOCATIONS_DATA)[0];
+  const setSelectedLocation = setPinned;
+
+  const mapEndpoints: MapEndpoint[] = registry
+    .filter((e) => e.is_geolocatable && e.lat !== null && e.lon !== null)
+    .map((e) => {
+      const ranked = caseView?.candidates.find((c) => c.endpoint_ref === e.public_ref);
+      return {
+        id: e.public_ref,
+        label: `${e.public_ref} · ${e.operator}`,
+        lat: e.lat as number,
+        lon: e.lon as number,
+        kind:
+          e.channel === 'ATM'
+            ? ('ATM' as const)
+            : e.channel === 'BANK_BRANCH'
+              ? ('Branch' as const)
+              : ('Other' as const),
+        risk: (ranked?.risk ?? 'LOW') as MapEndpoint['risk'],
+        score: ranked?.score,
+        rank: ranked?.rank,
+      };
+    });
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -193,7 +270,8 @@ export default function PredictedLocationsDashboard() {
             </div>
           </div>
         </header>
-        <ActiveRunBanner />
+        <CaseContextBar stage="Predicted locations" />
+        <PipelineRail current="Ranking" />
 
         <p className="mx-6 mt-4 rounded-md border border-line bg-surface px-3 py-2 text-[11px] italic text-ink-500">
           Mock predictions for interface development. No Tier 2 ranker is trained and
@@ -273,86 +351,20 @@ export default function PredictedLocationsDashboard() {
                 </div>
               </div>
 
-              {/* Simulated Dark-Mode Interactive Map Canvas */}
-              <div className="absolute inset-0 top-14 bottom-12 bg-[#05070D] opacity-90 flex items-center justify-center overflow-hidden">
-                {/* SVG Tactical Grid Graphic */}
-                <svg className="w-full h-full absolute inset-0 stroke-slate-800/40" width="100%" height="100%">
-                  <defs>
-                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                      <path d="M 40 0 L 0 0 0 40" fill="none" strokeWidth="0.5" />
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="url(#grid)" />
-                </svg>
-
-                {/* Tactical Radar Ring Animations */}
-                <div className="absolute w-96 h-96 border border-blue-500/10 rounded-full animate-ping pointer-events-none" style={{ animationDuration: '4s' }}></div>
-                <div className="absolute w-[500px] h-[500px] border border-line rounded-full pointer-events-none"></div>
-
-                {/* Clickable Map Nodes overlayed on tactical grid */}
-                <div className="relative w-full h-full">
-                  {/* Node 1: Chandni Chowk (Critical) */}
-                  <div
-                    onClick={() => setSelectedLocation(PREDICTED_LOCATIONS_DATA[0]!)}
-                    className="absolute top-[32%] left-[48%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-                  >
-                    <div className="relative flex items-center justify-center">
-                      <span className="absolute w-10 h-10 bg-rose-500/20 rounded-full animate-ping"></span>
-                      <div
-                        className={`w-7 h-7 rounded-full bg-rose-600 border-2 border-white flex items-center justify-center shadow-lg shadow-rose-950/80 transition-transform group-hover:scale-125 ${
-                          selectedLocation.id === 'LOC-2026-901' ? 'ring-4 ring-rose-500/40 scale-110' : ''
-                        }`}
-                      >
-                        <Target className="w-3.5 h-3.5 text-ink-900" />
-                      </div>
-                      {/* Tooltip Badge */}
-                      <div className="absolute left-8 top-0 bg-paper border border-line-strong px-2 py-1 rounded shadow-xl whitespace-nowrap text-[10px]">
-                        <p className="font-bold text-ink-900">Chandni Chowk Cluster</p>
-                        <p className="text-rose-400 font-mono">94% Risk Score</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Node 2: Rohini Sector 11 (High) */}
-                  <div
-                    onClick={() => setSelectedLocation(PREDICTED_LOCATIONS_DATA[1]!)}
-                    className="absolute top-[20%] left-[28%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-                  >
-                    <div className="relative flex items-center justify-center">
-                      <div
-                        className={`w-6 h-6 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center shadow-lg transition-transform group-hover:scale-125 ${
-                          selectedLocation.id === 'LOC-2026-902' ? 'ring-4 ring-amber-500/40 scale-110' : ''
-                        }`}
-                      >
-                        <Crosshair className="w-3 h-3 text-black" />
-                      </div>
-                      <div className="absolute left-7 top-0 bg-paper border border-line-strong px-2 py-1 rounded shadow-xl whitespace-nowrap text-[10px]">
-                        <p className="font-bold text-ink-900">Rohini Sector 11</p>
-                        <p className="text-amber-400 font-mono">81% Risk Score</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Node 3: Gurugram Cyber City (Medium) */}
-                  <div
-                    onClick={() => setSelectedLocation(PREDICTED_LOCATIONS_DATA[2]!)}
-                    className="absolute top-[68%] left-[38%] -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-                  >
-                    <div className="relative flex items-center justify-center">
-                      <div
-                        className={`w-5 h-5 rounded-full bg-blue-500 border border-white flex items-center justify-center shadow-lg transition-transform group-hover:scale-125 ${
-                          selectedLocation.id === 'LOC-2026-903' ? 'ring-4 ring-blue-500/40 scale-110' : ''
-                        }`}
-                      >
-                        <MapPin className="w-3 h-3 text-ink-900" />
-                      </div>
-                      <div className="absolute left-6 top-0 bg-paper border border-line-strong px-2 py-1 rounded shadow-xl whitespace-nowrap text-[10px]">
-                        <p className="font-bold text-ink-900">Gurugram Cyber City</p>
-                        <p className="text-blue-400 font-mono">67% Risk Score</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              {/* A real projection in place of the tactical grid. Same
+                  endpoints, same scores, same selection as the ranked list
+                  beside it — one dataset, so the two cannot disagree about
+                  which location is first. */}
+              <div className="absolute inset-0 top-14 bottom-12 overflow-hidden">
+                <EndpointMap
+                  endpoints={mapEndpoints}
+                  selectedId={selectedLocation.id}
+                  onSelect={(id) => {
+                    const hit = locations.find((l) => l.id === id);
+                    if (hit) setSelectedLocation(hit);
+                  }}
+                  className="h-full w-full"
+                />
               </div>
 
               {/* Map Canvas Footer Info */}

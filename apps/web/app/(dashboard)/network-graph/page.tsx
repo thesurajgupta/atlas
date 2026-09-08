@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { CaseContextBar } from "@/components/demo/CaseContextBar";
+import { PipelineRail } from "@/components/demo/PipelineRail";
+import { useCaseView, formatRupees } from "@/lib/case-view";
 import {
   ReactFlow,
   Background,
@@ -207,9 +210,83 @@ const initialEdges: Edge[] = [
   { id: "e13", source: "p-19384", target: "p-78234", label: "Communicates", style: { stroke: "#10B981", strokeDasharray: "4 4" } },
 ];
 
+/**
+ * The active case as nodes and edges, in the shape this canvas already renders.
+ *
+ * Laid out by depth — column per hop from the victim — rather than by a physics
+ * simulation. Money has a direction, and a force layout redraws the same case
+ * differently on every visit, so "the account on the left" stops meaning
+ * anything between two people looking at one screen.
+ *
+ * Every node here is an account that appears in the reconstructed trail. It
+ * cannot show an entity the case does not contain, which was the point.
+ */
+function graphFromCase(view: NonNullable<ReturnType<typeof useCaseView>>): {
+  nodes: Node[];
+  edges: Edge[];
+} {
+  const byDepth = new Map<number, typeof view.nodes>();
+  for (const n of view.nodes) {
+    byDepth.set(n.depth, [...(byDepth.get(n.depth) ?? []), n]);
+  }
+
+  const nodes: Node[] = view.nodes.map((n) => {
+    const column = byDepth.get(n.depth) ?? [];
+    const row = column.findIndex((c) => c.id === n.id);
+    return {
+      id: n.id,
+      type: "custom",
+      position: { x: 60 + n.depth * 210, y: 60 + row * 130 },
+      data: {
+        label: n.label,
+        sublabel:
+          n.role === "VICTIM"
+            ? "Victim account"
+            : n.role === "TERMINAL"
+              ? "Terminal — no onward transfer"
+              : `Mule · hop ${n.depth}`,
+        type: "account",
+        isCentral: n.role === "VICTIM",
+        risk: n.role === "TERMINAL" ? "high" : undefined,
+      },
+    };
+  });
+
+  const edges: Edge[] = view.hops.map((h) => ({
+    id: h.id,
+    source: h.from,
+    target: h.to,
+    label: formatRupees(h.amount),
+    animated: true,
+    style: { stroke: "#4A8CD4", strokeWidth: 1.5 },
+  }));
+
+  return { nodes, edges };
+}
+
 export default function NetworkGraphDashboard() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const caseView = useCaseView();
+  const fromCase = caseView ? graphFromCase(caseView) : null;
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(
+    fromCase?.nodes ?? initialNodes,
+  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState(
+    fromCase?.edges ?? initialEdges,
+  );
+
+  // A run started or cleared while this page was mounted replaces the canvas.
+  // `useNodesState` seeds once, so without this the graph would keep showing
+  // whatever it was initialised with.
+  const signature = caseView ? `${caseView.caseRef}:${caseView.hops.length}` : "none";
+  const lastSignature = useRef(signature);
+  useEffect(() => {
+    if (lastSignature.current === signature) return;
+    lastSignature.current = signature;
+    const next = caseView ? graphFromCase(caseView) : { nodes: initialNodes, edges: initialEdges };
+    setNodes(next.nodes);
+    setEdges(next.edges);
+  }, [signature, caseView, setNodes, setEdges]);
   const [activeTab, setActiveTab] = useState<"Graph" | "List" | "Timeline">("Graph");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -260,6 +337,8 @@ export default function NetworkGraphDashboard() {
             </div>
           </div>
         </header>
+        <CaseContextBar stage="Network graph" />
+        <PipelineRail current="Network" />
 
         <p className="mx-6 mt-4 rounded-md border border-line bg-surface px-3 py-2 text-[11px] italic text-ink-500">
           Mock network for interface development. Synthetic accounts only.

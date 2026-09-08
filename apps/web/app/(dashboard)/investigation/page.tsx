@@ -1,6 +1,9 @@
 
 'use client';
 import React, { useState } from 'react';
+import { CaseContextBar } from '@/components/demo/CaseContextBar';
+import { PipelineRail } from '@/components/demo/PipelineRail';
+import { useCaseView, formatRupees } from '@/lib/case-view';
 import { 
   Search, Bell, FileText, Upload, 
   ArrowLeft, ArrowRight, Send, X, FileUp, Calendar
@@ -106,6 +109,30 @@ const CASE_DETAILS_DATA = {
 };
 
 export default function InvestigationDashboard() {
+  const caseView = useCaseView();
+
+  // The active case's own header, or the fixture's. `totalLoss` is what the
+  // complaint reported; the trail's own total is shown separately on the
+  // transaction pages, and conflating the two is how a case ends up with two
+  // different amounts on two screens.
+  const caseDetails = caseView
+    ? {
+        caseId: caseView.caseRef,
+        title: `${caseView.typology.replace(/_/g, ' ').toLowerCase()} — reconstructed`,
+        severity: caseView.alertSeverity ?? 'Under review',
+        assignedTo: 'Inspector [Delhi Cyber Cell]',
+        dateOpened: new Date(caseView.startedAt).toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }),
+        totalLoss: formatRupees(caseView.reportedAmount),
+        description:
+          caseView.signals.join(' · ') ||
+          'No behavioural signal was read from the reconstructed trail.',
+      }
+    : CASE_DETAILS_DATA;
+
   // State Management
   const [activeTab, setActiveTab] = useState<'caseDetails' | 'suspects' | 'evidence'>('suspects');
   const [selectedSuspect, setSelectedSuspect] = useState(SUSPECTS_DATA[0]!);  // module-level literal, never empty
@@ -205,6 +232,8 @@ export default function InvestigationDashboard() {
             </div>
           </div>
         </header>
+        <CaseContextBar stage="Investigation" />
+        <PipelineRail current="Risk" />
 
         <p className="mx-6 mt-4 rounded-md border border-line bg-surface px-3 py-2 text-[11px] italic text-ink-500">
           Mock case data for interface development. Synthetic identifiers only.
@@ -216,14 +245,14 @@ export default function InvestigationDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-ink-900">
-                Investigation: {CASE_DETAILS_DATA.title}
+                Investigation: {caseDetails.title}
               </h2>
               <div className="flex items-center space-x-3 mt-1 text-xs text-ink-500">
                 <span className="bg-raised text-ink-700 px-2 py-0.5 rounded border border-line-strong">
-                  Case ID: {CASE_DETAILS_DATA.caseId}
+                  Case ID: {caseDetails.caseId}
                 </span>
                 <span className="text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded font-medium">
-                  {CASE_DETAILS_DATA.severity} Severity
+                  {caseDetails.severity} Severity
                 </span>
               </div>
             </div>
@@ -320,15 +349,15 @@ export default function InvestigationDashboard() {
                   <div className="grid grid-cols-2 gap-4 text-xs">
                     <div className="bg-paper p-4 rounded-lg border border-line space-y-1">
                       <span className="text-ink-500">Assigned Investigator</span>
-                      <p className="font-medium text-ink-700 text-sm">{CASE_DETAILS_DATA.assignedTo}</p>
+                      <p className="font-medium text-ink-700 text-sm">{caseDetails.assignedTo}</p>
                     </div>
                     <div className="bg-paper p-4 rounded-lg border border-line space-y-1">
                       <span className="text-ink-500">Estimated Loss</span>
-                      <p className="font-bold text-rose-400 text-sm">{CASE_DETAILS_DATA.totalLoss}</p>
+                      <p className="font-bold text-rose-400 text-sm">{caseDetails.totalLoss}</p>
                     </div>
                     <div className="bg-paper p-4 rounded-lg border border-line space-y-1">
                       <span className="text-ink-500">Date Opened</span>
-                      <p className="font-medium text-ink-700 text-sm">{CASE_DETAILS_DATA.dateOpened}</p>
+                      <p className="font-medium text-ink-700 text-sm">{caseDetails.dateOpened}</p>
                     </div>
                     <div className="bg-paper p-4 rounded-lg border border-line space-y-1">
                       <span className="text-ink-500">Primary Incident Type</span>
@@ -338,7 +367,7 @@ export default function InvestigationDashboard() {
                   <div>
                     <h4 className="text-xs font-semibold text-ink-500 mb-2">Case Summary</h4>
                     <p className="text-xs text-ink-700 bg-paper p-4 rounded-lg border border-line leading-relaxed">
-                      {CASE_DETAILS_DATA.description}
+                      {caseDetails.description}
                     </p>
                   </div>
                 </div>

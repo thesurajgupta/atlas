@@ -1,6 +1,7 @@
 "use client";
 
-import { ActiveRunBanner } from "@/components/demo/ActiveRunBanner";
+import { CaseContextBar } from "@/components/demo/CaseContextBar";
+import { PipelineRail } from "@/components/demo/PipelineRail";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -121,7 +122,8 @@ export default function AlertsPage() {
         subtitle="Decisions the alert policy made, newest first. Live from the API."
         searchPlaceholder="Search alerts by case…"
       />
-      <ActiveRunBanner />
+      <CaseContextBar stage="Alerts" />
+      <PipelineRail current="Alert" />
       <div className="mx-auto max-w-4xl px-6 py-5">
       {error && (
         <p

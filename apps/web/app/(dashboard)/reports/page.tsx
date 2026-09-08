@@ -1,7 +1,10 @@
 // app/reports/page.tsx
 'use client';
 
+import { CaseContextBar } from '@/components/demo/CaseContextBar';
+import { PipelineRail } from '@/components/demo/PipelineRail';
 import React, { useState } from 'react';
+import { useCaseView, formatRupees } from '@/lib/case-view';
 import {
   Search,
   Bell,
@@ -115,6 +118,92 @@ const INITIAL_REPORTS = [
   }
 ];
 
+/**
+ * The report for the case currently under investigation.
+ *
+ * Every figure is read from the same projection the trail, network and map
+ * pages use, so a report cannot quote an amount the trail does not show. The
+ * aggregates further down this page are a different thing — they describe the
+ * whole dataset, not this case — and they stay where they are rather than being
+ * mixed in, because a per-case report that silently blends in fleet-wide
+ * numbers is the report nobody can defend.
+ *
+ * Renders nothing when no case is active.
+ */
+function CaseReport() {
+  const view = useCaseView();
+  if (!view) return null;
+
+  const rows: [string, string][] = [
+    ['Case reference', view.caseRef],
+    ['Typology', view.typology.replace(/_/g, ' ').toLowerCase()],
+    ['Amount reported', formatRupees(view.reportedAmount)],
+    ['Moved across the trail', formatRupees(view.totalMoved)],
+    ['Hops reconstructed', String(view.hops.length)],
+    ['Accounts on the path', String(view.nodes.length)],
+    [
+      'Golden hour',
+      view.goldenHourMinutes === null ? 'unknown' : `${view.goldenHourMinutes} min elapsed`,
+    ],
+    [
+      'Predicted window',
+      view.windowStart && view.windowEnd
+        ? `${new Date(view.windowStart).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} – ${new Date(view.windowEnd).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+        : 'not predicted',
+    ],
+    [
+      'Top candidate',
+      view.candidates[0]
+        ? `${view.candidates[0].endpoint_ref} · score ${view.candidates[0].score.toFixed(2)}`
+        : 'none ranked',
+    ],
+    ['Alert', view.alertRaised ? (view.alertSeverity ?? 'raised') : 'not raised'],
+  ];
+
+  return (
+    <section className="mx-6 mt-4 overflow-hidden rounded-lg border border-line bg-surface">
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
+        <h2 className="text-[12px] font-medium uppercase tracking-wider text-ink-500">
+          Case report · {view.caseRef}
+        </h2>
+        <span className="text-[10px] uppercase tracking-wider text-ink-300">
+          synthetic data
+        </span>
+      </div>
+      <dl className="grid gap-x-6 gap-y-2 px-4 py-3 text-[12px] sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex justify-between gap-3 border-b border-line/50 py-1">
+            <dt className="text-ink-500">{label}</dt>
+            <dd className="text-right text-ink-900">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {view.signals.length > 0 && (
+        <div className="border-t border-line px-4 py-3">
+          <p className="mb-1.5 text-[10px] uppercase tracking-wider text-ink-500">
+            Risk signals
+          </p>
+          <ul className="space-y-1">
+            {view.signals.map((sig) => (
+              <li key={sig} className="text-[12px] text-ink-700">
+                — {sig}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {view.alertReason && (
+        <div className="border-t border-line px-4 py-3">
+          <p className="mb-1 text-[10px] uppercase tracking-wider text-ink-500">
+            Alert decision
+          </p>
+          <p className="text-[12px] leading-snug text-ink-700">{view.alertReason}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ReportsDashboard() {
   // --- STATE MANAGEMENT ---
   const [reports, setReports] = useState(INITIAL_REPORTS);
@@ -221,6 +310,9 @@ export default function ReportsDashboard() {
             </div>
           </div>
         </header>
+        <CaseContextBar stage="Reports" />
+        <PipelineRail current="Alert" />
+        <CaseReport />
 
         <p className="mx-6 mt-4 rounded-md border border-line bg-surface px-3 py-2 text-[11px] italic text-ink-500">
           Mock aggregates for interface development. Live figures need the intervention and outcome recording described in §26, which is not built.
