@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError, auth, listCases, type ApiCase } from "@/lib/api";
+import { useSignedIn } from "@/lib/use-signed-in";
 import { PageHeader } from "@/components/nav/PageHeader";
 
 /**
@@ -36,15 +37,15 @@ function rupees(amount: string | null): string {
 }
 
 export default function CasesPage() {
+  const signedIn = useSignedIn();
   const router = useRouter();
   const [cases, setCases] = useState<ApiCase[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth.isSignedIn()) {
-      router.replace("/login");
-      return;
-    }
+    // No redirect: `AutoSignIn` in the layout handles a signed-out console, and
+    // bouncing a presenter to a sign-in form mid-demo is the dead end that was.
+    if (!signedIn) return;
     listCases()
       .then((r) => setCases(r.items))
       .catch((err: unknown) => {
@@ -55,7 +56,7 @@ export default function CasesPage() {
         }
         setError(err instanceof ApiError ? err.message : "Could not load cases.");
       });
-  }, [router]);
+  }, [router, signedIn]);
 
   return (
     <>

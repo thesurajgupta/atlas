@@ -20,8 +20,9 @@ import {
 } from "@/lib/api";
 import { Funnel } from "@/components/overview/Funnel";
 import { MOCK_FUNNEL } from "@/lib/mock-data";
+import { useSignedIn } from "@/lib/use-signed-in";
 import { PageHeader } from "@/components/nav/PageHeader";
-import { Card, MockNotice, StatTile } from "@/components/ui/Card";
+import { Card, MockNotice, RiskChip, StatTile } from "@/components/ui/Card";
 
 /**
  * The dashboard answers one question: what is happening right now.
@@ -46,13 +47,142 @@ function rupees(amount: string | null): string {
   return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
 
+/**
+ * The operations queue: every alert decision, filterable, newest first.
+ *
+ * Structure taken from Lucky's dashboard in #78 — KPI row, filterable table,
+ * status chips. The data is not: his fed on a threat feed with IP addresses,
+ * user emails and entries like "Bot Attack — Moscow, RU". ATLAS holds none of
+ * those, forecasts the cash-out leg of reported fraud rather than intrusions,
+ * and `docs/NON-GOALS.md` rules out scoring individuals — which a table keyed on
+ * a person's email is. The same layout over `/api/v1/alerts` says something the
+ * system can actually stand behind.
+ */
+function OperationsTable({
+  alerts,
+  cases,
+}: {
+  alerts: ApiAlert[] | null;
+  cases: ApiCase[] | null;
+}) {
+  const [severity, setSeverity] = useState<string>("ALL");
+  const [showSuppressed, setShowSuppressed] = useState(true);
+
+  const byCase = new Map((cases ?? []).map((c) => [c.public_ref, c]));
+  const rows = (alerts ?? [])
+    .filter((a) => (showSuppressed ? true : a.raised))
+    .filter((a) => severity === "ALL" || a.severity === severity);
+
+  return (
+    <Card
+      title={`Operations queue · ${rows.length} decisions`}
+      action={
+        <div className="flex flex-wrap items-center gap-1">
+          {(["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSeverity(s)}
+              aria-pressed={severity === s}
+              className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider transition-colors ${
+                severity === s
+                  ? "border-ink-900 text-ink-900"
+                  : "border-line text-ink-500 hover:text-ink-700"
+              }`}
+            >
+              {s.toLowerCase()}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowSuppressed((v) => !v)}
+            aria-pressed={showSuppressed}
+            className={`ml-1 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider transition-colors ${
+              showSuppressed
+                ? "border-ink-900 text-ink-900"
+                : "border-line text-ink-500 hover:text-ink-700"
+            }`}
+          >
+            incl. suppressed
+          </button>
+        </div>
+      }
+      bodyClassName="overflow-x-auto"
+    >
+      {rows.length === 0 ? (
+        <p className="px-4 py-8 text-center text-[12px] text-ink-500">
+          {alerts === null ? "Loading…" : "No decisions match this filter."}
+        </p>
+      ) : (
+        <table className="w-full min-w-[46rem] text-left text-[12px]">
+          <thead className="border-b border-line text-[10px] uppercase tracking-wider text-ink-500">
+            <tr>
+              <th scope="col" className="px-4 py-2 font-medium">Severity</th>
+              <th scope="col" className="px-2 py-2 font-medium">Case</th>
+              <th scope="col" className="px-2 py-2 font-medium">Amount at risk</th>
+              <th scope="col" className="px-2 py-2 font-medium">Golden hour</th>
+              <th scope="col" className="px-4 py-2 font-medium">Decision</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {rows.map((a) => {
+              const linked = byCase.get(a.case_ref);
+              const minutes = linked?.golden_hour_minutes_elapsed ?? null;
+              return (
+                <tr key={a.id} className={a.raised ? "" : "opacity-70"}>
+                  <td className="px-4 py-2">
+                    {a.severity ? (
+                      <RiskChip level={a.severity} />
+                    ) : (
+                      <span className="text-[10px] uppercase tracking-wider text-ink-500">
+                        not sent
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2">
+                    <Link
+                      href="/investigation"
+                      className="font-medium text-ink-900 hover:text-accent"
+                    >
+                      {a.case_ref}
+                    </Link>
+                  </td>
+                  <td className="px-2 py-2 tabular-nums text-ink-700">
+                    {rupees(linked?.amount_at_risk ?? null)}
+                  </td>
+                  <td
+                    className={`px-2 py-2 tabular-nums ${
+                      minutes !== null && minutes <= 60
+                        ? "text-severity-high"
+                        : "text-ink-500"
+                    }`}
+                  >
+                    {minutes === null ? "—" : `${minutes}m`}
+                  </td>
+                  {/* The policy's own sentence, in full. It is the only place the
+                      typology, amount and endpoint appear together, and
+                      summarising it produces an alert nobody can weigh. */}
+                  <td className="max-w-[22rem] px-4 py-2 text-[11px] leading-snug text-ink-500">
+                    {a.reason}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
+  const signedIn = useSignedIn();
   const [cases, setCases] = useState<ApiCase[] | null>(null);
   const [alerts, setAlerts] = useState<ApiAlert[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth.isSignedIn()) return;
+    if (!signedIn) return;
     Promise.all([listCases(), listAlerts()])
       .then(([c, a]) => {
         setCases(c.items);
@@ -63,7 +193,7 @@ export default function DashboardPage() {
           err instanceof ApiError ? err.message : "Could not reach the ATLAS API.",
         );
       });
-  }, []);
+  }, [signedIn]);
 
   const raised = alerts?.filter((a) => a.raised) ?? [];
   const suppressed = alerts?.filter((a) => !a.raised) ?? [];
@@ -130,6 +260,8 @@ export default function DashboardPage() {
             icon={<IndianRupee className="h-4 w-4" aria-hidden />}
           />
         </div>
+
+        <OperationsTable alerts={alerts} cases={cases} />
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card

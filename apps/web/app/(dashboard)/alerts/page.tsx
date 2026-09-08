@@ -6,6 +6,7 @@ import { PipelineRail } from "@/components/demo/PipelineRail";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, auth, listAlerts, type ApiAlert } from "@/lib/api";
+import { useSignedIn } from "@/lib/use-signed-in";
 import { PageHeader } from "@/components/nav/PageHeader";
 
 /**
@@ -79,6 +80,7 @@ function AlertRow({ alert }: { alert: ApiAlert }) {
 }
 
 export default function AlertsPage() {
+  const signedIn = useSignedIn();
   const router = useRouter();
   const [alerts, setAlerts] = useState<ApiAlert[] | null>(null);
   const [totals, setTotals] = useState({ raised: 0, suppressed: 0 });
@@ -87,10 +89,9 @@ export default function AlertsPage() {
   const [showSuppressed, setShowSuppressed] = useState(false);
 
   useEffect(() => {
-    if (!auth.isSignedIn()) {
-      router.replace("/login");
-      return;
-    }
+    // No redirect: `AutoSignIn` in the layout handles a signed-out console, and
+    // bouncing a presenter to a sign-in form mid-demo is the dead end that was.
+    if (!signedIn) return;
     listAlerts()
       .then((r) => {
         setAlerts(r.items);
@@ -104,7 +105,7 @@ export default function AlertsPage() {
         }
         setError(err instanceof ApiError ? err.message : "Could not load alerts.");
       });
-  }, [router]);
+  }, [router, signedIn]);
 
   const raised = useMemo(
     () =>
