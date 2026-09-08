@@ -424,3 +424,30 @@ export const evaluateAlert = (body: AlertEvaluateRequest) =>
     method: "POST",
     body: JSON.stringify(body),
   });
+
+
+/**
+ * Build a transaction chain for one complaint. Development only.
+ *
+ * Stands in for the bank feed (#65). Without it a complaint and its trail have
+ * no relationship, and their amounts cannot agree.
+ */
+export interface DemoTrailResponse {
+  origin_entity_id: string;
+  hops: number;
+  accounts: number;
+  /** What the victim sent. Equals the complaint amount. */
+  entered: string;
+  /** What survived the mules' cuts. Always less than `entered`. */
+  reached_terminals: string;
+}
+
+export const buildDemoTrail = (body: {
+  case_ref: string;
+  amount: string;
+  fraud_initiated_at: string;
+}) =>
+  request<DemoTrailResponse>("/api/v1/graph/demo-trail", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });

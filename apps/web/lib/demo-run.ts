@@ -40,6 +40,10 @@ export interface DemoRun {
   complaint: ApiComplaint | null;
   origin_entity_id: string | null;
   trail: TrailResponse | null;
+  /** What the victim sent. Equals the complaint amount. */
+  entered: number | null;
+  /** What survived the mules' cuts. Always less than `entered`. */
+  reached_terminals: number | null;
   signals: string[];
   candidates: RankedCandidate[];
   window_start: string | null;

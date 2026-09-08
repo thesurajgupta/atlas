@@ -214,7 +214,7 @@ function trailFromCase(view: NonNullable<ReturnType<typeof useCaseView>>) {
   return {
     trailId: view.caseRef,
     caseTitle: `${view.typology.replace(/_/g, " ").toLowerCase()} — reconstructed trail`,
-    totalFlow: formatRupees(view.totalMoved),
+    totalFlow: formatRupees(view.entered),
     status: view.alertSeverity ?? "Under review",
     nodes,
   };

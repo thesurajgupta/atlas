@@ -254,8 +254,11 @@ function RunResult() {
             </ol>
             <p className="mt-3 border-t border-line pt-2.5 text-[11px] text-ink-500">
               Walked by the time-respecting recursive CTE, bounded at{" "}
-              <code className="font-mono">as_of</code>. {formatRupees(view.totalMoved)} moved
-              across the reconstructed path.
+              <code className="font-mono">as_of</code>.{" "}
+              <strong className="text-ink-700">{formatRupees(view.entered)}</strong> left the
+              victim — the amount reported — and{" "}
+              <strong className="text-ink-700">{formatRupees(view.reachedTerminals)}</strong>{" "}
+              survived the mules&apos; cuts to reach a terminal account.
             </p>
           </>
         )}

@@ -70,7 +70,17 @@ export interface CaseView {
 
   hops: CaseTrailHop[];
   nodes: CaseTrailNode[];
-  totalMoved: number;
+
+  /**
+   * What the victim sent — equal to the complaint amount.
+   *
+   * Deliberately not "total moved". Summing every hop counts money that moved
+   * three times three times over, which produced a figure larger than the
+   * amount defrauded and read as a bug because it looked like one.
+   */
+  entered: number;
+  /** What survived the mules' cuts. Always less than `entered`. */
+  reachedTerminals: number;
 
   signals: string[];
   candidates: RankedCandidate[];
@@ -180,7 +190,15 @@ function project(run: DemoRun): CaseView | null {
     observedAt: run.complaint.observed_at,
     hops,
     nodes,
-    totalMoved: hops.reduce((sum, h) => sum + h.amount, 0),
+    // Read off the trail when the builder did not supply them, so a case
+    // loaded from an older run still shows something true: depth 1 is what left
+    // the victim, and a node that never pays out is a terminal.
+    entered:
+      run.entered ??
+      hops.filter((h) => h.depth === 1).reduce((sum, h) => sum + h.amount, 0),
+    reachedTerminals:
+      run.reached_terminals ??
+      nodes.filter((n) => n.role === "TERMINAL").reduce((sum, n) => sum + n.received, 0),
     signals: run.signals,
     candidates: run.candidates,
     windowStart: run.window_start,

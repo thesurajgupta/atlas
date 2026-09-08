@@ -66,9 +66,14 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from atlas.audit.service import Actor, AuditRequest, record
 from atlas.core import context
+from atlas.core.config import Environment, get_settings
 from atlas.core.enums import NodeKind
+from atlas.core.errors import NotFoundError
 from atlas.graph.artefacts import artefact_neighbourhood
+from atlas.graph.demo_trail import build_demo_trail
 from atlas.graph.schemas import (
+    DemoTrailRequest,
+    DemoTrailResponse,
     NeighbourhoodQueryParams,
     NeighbourhoodResponse,
     TrailPathOut,
@@ -276,4 +281,62 @@ async def get_neighbourhood(
 
     return NeighbourhoodResponse.from_domain(
         neighbourhood, node_kind=kind, node_id=node_id, as_of=params.as_of
+    )
+
+
+@router.post("/demo-trail", response_model=DemoTrailResponse, status_code=201)
+async def create_demo_trail(
+    payload: DemoTrailRequest,
+    request: Request,
+    session: SessionDep,
+    investigator: CurrentInvestigator,
+) -> DemoTrailResponse:
+    """Materialise a transaction chain for one complaint. **Development only.**
+
+    Stands in for the bank feed the ingest connector will supply (#65). Without
+    it the walkthrough had to attach an arbitrary pre-ingested scenario to
+    whatever complaint had just been filed, so a ₹7,00,000 complaint showed a
+    chain carrying entirely unrelated sums — the amounts could not agree because
+    nothing connected them.
+
+    A 404 outside development, like every other convenience route here: the
+    endpoint's existence should not be discoverable in a deployed environment,
+    and this one *writes to the transaction graph*, which is a far stronger
+    reason to keep it unreachable than the demo login had.
+    """
+    if get_settings().env is not Environment.DEVELOPMENT:
+        raise NotFoundError("not found")
+
+    built = await build_demo_trail(
+        session,
+        case_ref=payload.case_ref,
+        amount=payload.amount,
+        fraud_initiated_at=payload.fraud_initiated_at,
+    )
+
+    await record(
+        session,
+        AuditRequest(
+            action="graph.demo_trail.create",
+            resource_type="transaction_edge",
+            resource_id=payload.case_ref,
+            result="allowed",
+            correlation_id=context.get_correlation_id(),
+            detail={"hops": built.hops, "accounts": built.accounts},
+        ),
+        Actor(
+            id=investigator.id,
+            role=investigator.role.value,
+            jurisdiction=str(investigator.jurisdiction_id),
+            source_ip=request.client.host if request.client else None,
+        ),
+    )
+    await session.commit()
+
+    return DemoTrailResponse(
+        origin_entity_id=built.origin_entity_id,
+        hops=built.hops,
+        accounts=built.accounts,
+        entered=built.entered,
+        reached_terminals=built.reached_terminals,
     )

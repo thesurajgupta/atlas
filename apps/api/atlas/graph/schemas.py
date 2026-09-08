@@ -337,3 +337,27 @@ class NeighbourhoodResponse(BaseModel):
             redacted=[RedactedLinkOut.from_domain(link) for link in neighbourhood.redacted],
             reaches_other_jurisdictions=neighbourhood.reaches_other_jurisdictions,
         )
+
+
+class DemoTrailRequest(BaseModel):
+    """Materialise a transaction chain for one complaint (development only)."""
+
+    case_ref: str = Field(min_length=1, max_length=64)
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    fraud_initiated_at: datetime
+
+
+class DemoTrailResponse(BaseModel):
+    """What was built, and the two figures that must not be conflated.
+
+    ``entered`` is what the victim sent — it equals the complaint amount.
+    ``reached_terminals`` is what survived the mules' cuts. Summing every hop
+    would give a third, larger number that counts money twice, which is why
+    neither field is called "total".
+    """
+
+    origin_entity_id: uuid.UUID
+    hops: int
+    accounts: int
+    entered: Decimal
+    reached_terminals: Decimal

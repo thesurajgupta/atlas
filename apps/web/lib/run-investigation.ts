@@ -16,6 +16,7 @@
 
 import {
   auth,
+  buildDemoTrail,
   createComplaint,
   demoLogin,
   evaluateAlert,
@@ -102,6 +103,8 @@ export async function runInvestigation(options: RunOptions = {}): Promise<DemoRu
     complaint: null,
     origin_entity_id: null,
     trail: null,
+    entered: null,
+    reached_terminals: null,
     signals: [],
     candidates: [],
     window_start: null,
@@ -130,16 +133,33 @@ export async function runInvestigation(options: RunOptions = {}): Promise<DemoRu
   mark("complaint", "done");
   options.onProgress?.({ ...draft });
 
-  // 2. Money trail — real recursive-CTE walk over ingested simulator hops.
+  // 2. Money trail — built *for this complaint*, then walked by the real API.
+  //
+  // This used to attach an arbitrary pre-ingested simulator scenario to
+  // whatever complaint had just been filed, so a ₹7,00,000 complaint showed a
+  // chain carrying unrelated sums. Nothing connected the two, so the amounts
+  // could not agree. The chain is now generated from the complaint: the
+  // victim's outflows total exactly what was reported, and each mule keeps a
+  // cut, so less reaches the terminals than was defrauded.
   mark("trail", "running");
   await sleep(BEAT_MS);
-  const origin = await pickOriginWithTrail();
-  if (origin) {
-    draft.origin_entity_id = origin.originId;
-    draft.trail = origin.trail;
+  const amount = form?.amount ?? "1840000.00";
+  try {
+    const built = await buildDemoTrail({
+      case_ref: caseRef,
+      amount,
+      fraud_initiated_at: fraudStarted.toISOString(),
+    });
+    // Walked by the real endpoint, not returned by the builder — the trail a
+    // judge sees is the one `reconstruct_trail` produces, bounded at `as_of`.
+    const asOf = new Date(Date.now() + 86_400_000).toISOString();
+    draft.trail = await getTrail(built.origin_entity_id, asOf);
+    draft.origin_entity_id = built.origin_entity_id;
+    draft.entered = Number(built.entered);
+    draft.reached_terminals = Number(built.reached_terminals);
     mark("trail", "done");
-  } else {
-    // Named, not hidden. An empty graph is a real state and the walkthrough has
+  } catch {
+    // Named, not hidden. A failure here is a real state and the walkthrough has
     // to say so rather than showing an invented chain.
     draft.provenance["trail"] = "simulated";
     mark("trail", "failed");
@@ -188,32 +208,6 @@ export async function runInvestigation(options: RunOptions = {}): Promise<DemoRu
 }
 
 /* ------------------------------------------------------------------ helpers */
-
-async function pickOriginWithTrail(): Promise<{
-  originId: string;
-  trail: Awaited<ReturnType<typeof getTrail>>;
-} | null> {
-  // `as_of` in the future so the whole ingested history is in scope. This is
-  // showing reconstruction, not a point-in-time read.
-  const asOf = new Date(Date.now() + 86_400_000).toISOString();
-
-  // Written by `scripts/seed_demo_trail.py`, longest chain first, so the first
-  // origin that walks is the best available. Bounded at five: probing all forty
-  // sequentially took long enough to outlive an access token.
-  const seeds = await fetch("/demo-origins.json")
-    .then((r) => (r.ok ? (r.json() as Promise<{ origins: string[] }>) : null))
-    .catch(() => null);
-
-  for (const originId of (seeds?.origins ?? []).slice(0, 5)) {
-    try {
-      const trail = await getTrail(originId, asOf);
-      if (trail.paths.some((p) => p.hops.length > 0)) return { originId, trail };
-    } catch {
-      /* try the next one */
-    }
-  }
-  return null;
-}
 
 function deriveSignals(run: DemoRun): string[] {
   const seen = new Set<string>();

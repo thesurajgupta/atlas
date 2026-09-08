@@ -138,7 +138,8 @@ function CaseReport() {
     ['Case reference', view.caseRef],
     ['Typology', view.typology.replace(/_/g, ' ').toLowerCase()],
     ['Amount reported', formatRupees(view.reportedAmount)],
-    ['Moved across the trail', formatRupees(view.totalMoved)],
+    ['Left the victim', formatRupees(view.entered)],
+    ['Reached a terminal account', formatRupees(view.reachedTerminals)],
     ['Hops reconstructed', String(view.hops.length)],
     ['Accounts on the path', String(view.nodes.length)],
     [
