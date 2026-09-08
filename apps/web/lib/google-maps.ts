@@ -41,7 +41,20 @@
 export const GOOGLE_MAPS_API_KEY: string =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ?? '';
 
-export const HAS_GOOGLE_MAPS_KEY = GOOGLE_MAPS_API_KEY.length > 0;
+/**
+ * The placeholder `.env.example` ships, treated as "no key".
+ *
+ * Without this, an unedited `.env.local` reads as a configured key: the loader
+ * requests the API, Google rejects it, and the screen shows an empty dark panel
+ * with markers floating on nothing. That is strictly worse than the "Google
+ * Maps unavailable" state, which says what is missing and notes that the ranked
+ * candidates do not depend on the basemap. A value nobody has replaced is not a
+ * key, and pretending otherwise only hides the reason.
+ */
+const PLACEHOLDER_KEY = 'YOUR_ACTUAL_GOOGLE_MAPS_API_KEY';
+
+export const HAS_GOOGLE_MAPS_KEY =
+  GOOGLE_MAPS_API_KEY.length > 0 && GOOGLE_MAPS_API_KEY !== PLACEHOLDER_KEY;
 
 /** The environment variable to name in any message about a missing key. */
 export const GOOGLE_MAPS_KEY_VARIABLE = 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY';

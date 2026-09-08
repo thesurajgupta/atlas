@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowRightLeft,
   Building2,
@@ -13,6 +14,9 @@ import {
 import { MOCK_CASES } from "@/lib/mock-data";
 import { SYNTHETIC_TRAIL_PATHS } from "@/lib/graph/synthetic-trail";
 import type { Case } from "@/lib/types";
+import { rupees as inr } from "@/lib/demo/defaults";
+import { useDemoCase } from "@/lib/demo/store";
+import { CaseBanner } from "@/components/demo/CaseBanner";
 import { PageHeader } from "@/components/nav/PageHeader";
 import { Card, MockNotice } from "@/components/ui/Card";
 import { EvidenceBadge } from "@/components/prediction/EvidenceBadge";
@@ -83,16 +87,59 @@ function CaseSummary({ item }: { item: Case }) {
   );
 }
 
-export default function InvestigationPage() {
-  const [caseId, setCaseId] = useState(MOCK_CASES[0]?.case_id ?? "");
-  const item = MOCK_CASES.find((c) => c.case_id === caseId) ?? MOCK_CASES[0];
-
-  // The trail fixture is the same one `/money-trail` renders, so the hop count
-  // here and the canvas there cannot disagree.
-  const hops = SYNTHETIC_TRAIL_PATHS.flatMap((p) => p.hops);
-  const accounts = new Set(
-    hops.flatMap((h) => [h.from_entity_id, h.to_entity_id]),
+/**
+ * `useSearchParams` forces the surrounding tree out of static prerendering, so
+ * it lives behind a boundary rather than at the top of the route. Without this,
+ * `next build` fails the whole page rather than deferring the part that reads
+ * the query string.
+ */
+export default function InvestigationRoute() {
+  return (
+    <Suspense
+      fallback={<p className="px-6 py-16 text-center text-[13px] text-ink-500">Loading case…</p>}
+    >
+      <InvestigationPage />
+    </Suspense>
   );
+}
+
+function InvestigationPage() {
+  const { activeCase } = useDemoCase();
+  const requestedCase = useSearchParams().get("case");
+
+  const cases: Case[] =
+    activeCase === null ? MOCK_CASES : [activeCase.atlas_case, ...MOCK_CASES];
+
+  // `null` follows the referred case. A seeded id would pin whatever was first
+  // before the store hydrated, which is exactly the case an operator did not
+  // ask for.
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const caseId = pinnedId ?? requestedCase ?? cases[0]?.case_id ?? "";
+  const item = cases.find((c) => c.case_id === caseId) ?? cases[0];
+
+  const isLive = item !== undefined && item.case_id === activeCase?.case_id;
+
+  /**
+   * The same trail `/money-trail` draws and `/network-graph` folds.
+   *
+   * **De-duplicated on `edge_id`.** Paths overlap — three of them routinely
+   * share a leading hop — so a flat `flatMap` counts that hop three times and
+   * this card reports more hops than the pipeline, the canvas and the network
+   * graph do. Which is the exact "two screens, two numbers" failure the whole
+   * shared case exists to prevent.
+   */
+  const paths = isLive && activeCase !== null ? activeCase.trail_paths : SYNTHETIC_TRAIL_PATHS;
+  const hops = [...new Map(paths.flatMap((p) => p.hops).map((h) => [h.edge_id, h])).values()];
+  // Accounts, not entities: a cash-out endpoint is where the money left, not an
+  // account on the path. The live case counts them the same way (`account_count`).
+  const accountCount =
+    isLive && activeCase !== null
+      ? activeCase.features.account_count
+      : new Set(
+          hops
+            .filter((h) => h.edge_type === "TRANSFERRED_TO")
+            .flatMap((h) => [h.from_entity_id, h.to_entity_id]),
+        ).size;
 
   if (!item) return null;
 
@@ -105,11 +152,12 @@ export default function InvestigationPage() {
           <select
             aria-label="Case"
             value={caseId}
-            onChange={(e) => setCaseId(e.target.value)}
+            onChange={(e) => setPinnedId(e.target.value)}
             className="rounded-md border border-line bg-raised px-2.5 py-1.5 text-[12px] text-ink-900 focus:border-accent focus:outline-none"
           >
-            {MOCK_CASES.map((c) => (
+            {cases.map((c) => (
               <option key={c.case_id} value={c.case_id}>
+                {c.case_id === activeCase?.case_id ? "● " : ""}
                 {c.case_id} — {c.fact_strip.typology.replace(/_/g, " ").toLowerCase()}
               </option>
             ))}
@@ -118,12 +166,45 @@ export default function InvestigationPage() {
       />
 
       <div className="px-6 py-5">
+        <CaseBanner page="The investigation workspace" />
+
         <div className="mb-4">
           <MockNotice>
-            Mock case data for interface development. The trail, network and prediction
-            below are the same fixture, so the story stays consistent across pages.
+            {isLive && activeCase !== null ? (
+              <>
+                Everything below is derived from complaint {activeCase.complaint.complaint_id} —
+                the trail, the account count and the prediction are the same objects{" "}
+                <span className="not-italic">Transaction trail</span>,{" "}
+                <span className="not-italic">Network graph</span> and{" "}
+                <span className="not-italic">Predicted locations</span> render. The ranking is a
+                stated heuristic, not a trained model.
+              </>
+            ) : (
+              <>
+                Mock case data for interface development. The trail, network and prediction below
+                are the same fixture, so the story stays consistent across pages.
+              </>
+            )}
           </MockNotice>
         </div>
+
+        {isLive && activeCase !== null && (
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Complaint", activeCase.complaint.complaint_id],
+              ["Victim account", activeCase.complaint.victim_account],
+              ["Transaction ID", activeCase.complaint.transaction_id],
+              ["Reported amount", inr(activeCase.complaint.fraud_amount_inr)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-line bg-surface px-3.5 py-2.5">
+                <p className="text-[10px] uppercase tracking-wider text-ink-500">{label}</p>
+                <p className="mt-1 truncate font-mono text-[13px] font-medium text-ink-900">
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
           <div className="min-w-0 space-y-4">
@@ -172,7 +253,7 @@ export default function InvestigationPage() {
                   <Users className="h-5 w-5 shrink-0 text-ink-300" aria-hidden />
                   <p className="text-[13px] text-ink-700">
                     <span className="text-lg font-semibold tabular-nums text-ink-900">
-                      {accounts.size}
+                      {accountCount}
                     </span>{" "}
                     accounts on the reconstructed path.
                   </p>
@@ -268,7 +349,11 @@ export default function InvestigationPage() {
               <div className="flex items-start gap-2.5">
                 <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-ink-300" aria-hidden />
                 <div>
-                  <p className="text-[13px] text-ink-900">Delhi Cyber Cell</p>
+                  <p className="text-[13px] text-ink-900">
+                    {isLive && activeCase !== null
+                      ? `${activeCase.complaint.district}, ${activeCase.complaint.state}`
+                      : "Delhi Cyber Cell"}
+                  </p>
                   <p className="mt-0.5 text-[11px] text-ink-500">
                     Cross-jurisdiction reads return 404, not 403, and are audited
                     either way (§29).
@@ -283,6 +368,32 @@ export default function InvestigationPage() {
                 See linked cases
               </Link>
             </Card>
+
+            {isLive && activeCase !== null && (
+              <Card
+                title="Alert raised"
+                action={
+                  <Link
+                    href="/alerts"
+                    className="inline-flex items-center gap-1 text-[11px] text-accent transition-opacity hover:opacity-80"
+                  >
+                    Alerts <ExternalLink className="h-3 w-3" aria-hidden />
+                  </Link>
+                }
+              >
+                <p className="flex items-baseline justify-between gap-2">
+                  <span className="font-mono text-[12px] text-ink-900">
+                    {activeCase.alert.alert_id}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider text-severity-high">
+                    {activeCase.alert.severity}
+                  </span>
+                </p>
+                <p className="mt-1.5 text-[11.5px] leading-snug text-ink-700">
+                  {activeCase.alert.reason}
+                </p>
+              </Card>
+            )}
           </div>
         </div>
       </div>

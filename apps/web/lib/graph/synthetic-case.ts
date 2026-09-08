@@ -17,6 +17,15 @@
 
 export interface SyntheticCaseContext {
   readonly caseId: string;
+  /**
+   * The complaint this case was opened on, where there is one.
+   *
+   * Optional because a case can exist without a reference in this build — the
+   * development fixture below has none. When it is present the strip prints it,
+   * because the reference is what a citizen quotes and what a judge compares
+   * against the reporting portal, and a case id alone does not answer either.
+   */
+  readonly complaintRef?: string;
   readonly typology: string;
   /**
    * Amount reported by the complainant.

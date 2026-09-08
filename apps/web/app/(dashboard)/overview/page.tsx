@@ -13,6 +13,9 @@ import {
 } from "@/lib/api";
 import { Funnel } from "@/components/overview/Funnel";
 import { MOCK_FUNNEL } from "@/lib/mock-data";
+import { rupees as inr } from "@/lib/demo/defaults";
+import { useDemoCase } from "@/lib/demo/store";
+import { CaseBanner } from "@/components/demo/CaseBanner";
 import { PageHeader } from "@/components/nav/PageHeader";
 import { Card, MockNotice, StatTile } from "@/components/ui/Card";
 
@@ -40,6 +43,7 @@ function rupees(amount: string | null): string {
 }
 
 export default function DashboardPage() {
+  const { activeCase } = useDemoCase();
   const [cases, setCases] = useState<ApiCase[] | null>(null);
   const [alerts, setAlerts] = useState<ApiAlert[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +73,18 @@ export default function DashboardPage() {
   const atRisk =
     cases?.reduce((sum, c) => sum + Number(c.amount_at_risk ?? 0), 0) ?? 0;
 
+  /* The referred case counts in the tiles like any other open case.
+   *
+   * It is one of the cases in front of this operator, and leaving it out would
+   * make the dashboard say "no cases inside the golden hour" while a case filed
+   * two minutes ago sits one click away. The counts below are the API's plus
+   * one, never the API's replaced. */
+  const demoCount = activeCase === null ? 0 : 1;
+  const demoInGoldenHour =
+    activeCase !== null && activeCase.features.golden_hour_minutes <= 60 ? 1 : 0;
+  const totalCases = (cases?.length ?? 0) + demoCount;
+  const totalAtRisk = atRisk + (activeCase?.complaint.fraud_amount_inr ?? 0);
+
   return (
     <>
       <PageHeader
@@ -77,6 +93,8 @@ export default function DashboardPage() {
       />
 
       <div className="space-y-4 px-6 py-5">
+        <CaseBanner page="The dashboard" />
+
         {error && (
           <p
             role="alert"
@@ -88,27 +106,27 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatTile
-            value={inGoldenHour.length}
+            value={inGoldenHour.length + demoInGoldenHour}
             label="Cases inside the golden hour"
-            tone={inGoldenHour.length > 0 ? "critical" : "neutral"}
+            tone={inGoldenHour.length + demoInGoldenHour > 0 ? "critical" : "neutral"}
             hint="Interception is still possible"
             icon={<Clock className="h-4 w-4" aria-hidden />}
           />
           <StatTile
-            value={raised.length}
+            value={raised.length + demoCount}
             label="Alerts raised"
-            tone={raised.length > 0 ? "warning" : "neutral"}
+            tone={raised.length + demoCount > 0 ? "warning" : "neutral"}
             hint={`${suppressed.length} refused, with reasons`}
             icon={<AlertTriangle className="h-4 w-4" aria-hidden />}
           />
           <StatTile
-            value={cases?.length ?? "—"}
+            value={cases === null && demoCount === 0 ? "—" : totalCases}
             label="Open cases"
             hint="Scoped to your jurisdiction"
             icon={<Briefcase className="h-4 w-4" aria-hidden />}
           />
           <StatTile
-            value={rupees(String(atRisk))}
+            value={rupees(String(totalAtRisk))}
             label="Amount at risk"
             hint="Sum across open cases"
             icon={<IndianRupee className="h-4 w-4" aria-hidden />}
@@ -128,10 +146,10 @@ export default function DashboardPage() {
             }
             bodyClassName=""
           >
-            {alerts === null && !error && (
+            {alerts === null && !error && activeCase === null && (
               <p className="px-4 py-6 text-center text-[12px] text-ink-500">Loading…</p>
             )}
-            {raised.length === 0 && alerts !== null && (
+            {raised.length === 0 && alerts !== null && activeCase === null && (
               <p className="px-4 py-6 text-center text-[12px] text-ink-500">
                 No alerts raised.{" "}
                 {suppressed.length > 0 &&
@@ -139,6 +157,23 @@ export default function DashboardPage() {
               </p>
             )}
             <ul className="divide-y divide-line">
+              {activeCase !== null && (
+                <li className="bg-severity-high/5 px-4 py-2.5">
+                  <Link href="/alerts" className="block">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-[12px] font-medium text-ink-900">
+                        {activeCase.alert.case_id}
+                      </span>
+                      <span className="shrink-0 text-[10px] uppercase tracking-wider text-severity-high">
+                        {activeCase.alert.severity}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-snug text-ink-500">
+                      {activeCase.alert.reason}
+                    </p>
+                  </Link>
+                </li>
+              )}
               {raised.slice(0, 4).map((a) => (
                 <li key={a.id} className="px-4 py-2.5">
                   <div className="flex items-baseline justify-between gap-2">
@@ -169,15 +204,47 @@ export default function DashboardPage() {
             }
             bodyClassName=""
           >
-            {cases === null && !error && (
+            {cases === null && !error && activeCase === null && (
               <p className="px-4 py-6 text-center text-[12px] text-ink-500">Loading…</p>
             )}
-            {cases?.length === 0 && (
+            {cases?.length === 0 && activeCase === null && (
               <p className="px-4 py-6 text-center text-[12px] text-ink-500">
                 No cases in your jurisdiction yet.
               </p>
             )}
             <ul className="divide-y divide-line">
+              {activeCase !== null && (
+                <li>
+                  <Link
+                    href={`/cases/${activeCase.case_id}`}
+                    className="flex items-center justify-between gap-3 bg-accent/5 px-4 py-2.5 transition-colors hover:bg-accent/10"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-[12px] font-medium text-ink-900">
+                        {activeCase.case_id}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-ink-500">
+                        {activeCase.complaint.complaint_type} ·{" "}
+                        {activeCase.complaint.complaint_id}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[11px] tabular-nums text-ink-700">
+                        {inr(activeCase.complaint.fraud_amount_inr)}
+                      </span>
+                      <span
+                        className={`block text-[10px] tabular-nums ${
+                          activeCase.features.golden_hour_minutes <= 60
+                            ? "text-severity-high"
+                            : "text-ink-500"
+                        }`}
+                      >
+                        {activeCase.features.golden_hour_minutes}m elapsed
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              )}
               {cases?.slice(0, 4).map((c) => {
                 const minutes = c.golden_hour_minutes_elapsed;
                 const urgent = minutes !== null && minutes <= 60;

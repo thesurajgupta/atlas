@@ -252,3 +252,36 @@ body {
   font-size: 9.5px;
   line-height: 1.4;
 }
+
+/* Network graph (components/graph/TransactionNetworkGraph).
+
+   Selecting a node dims everything unrelated. Cross-fading that is the whole
+   animation on this screen — positions never move, because a node that slides
+   when you click a table row makes the diagram harder to read, not easier.
+
+   Guarded on `no-preference` so nothing is declared for a viewer who asked for
+   reduced motion; the global reduce rule above would neutralise the duration
+   anyway, and this way there is no transition to neutralise. */
+@media (prefers-reduced-motion: no-preference) {
+  .atlas-graph-fade {
+    transition: opacity 160ms ease-out;
+  }
+}
+
+/* ===========================================================================
+   NCRP-style complaint portal (app/ncrp).
+
+   The console is a dark document — `<html class="dark">` and a dark `body`
+   colour — and the portal is a light one inside it. Painting a white panel is
+   not enough on its own: without `color-scheme`, the browser still renders the
+   date input's picker, the select's dropdown and the scrollbars dark, which is
+   the tell that gives away that this is one app wearing two skins.
+   =========================================================================== */
+.ncrp-surface {
+  color-scheme: light;
+}
+
+.ncrp-surface :focus-visible {
+  outline: 2px solid #1a3a6b;
+  outline-offset: 2px;
+}

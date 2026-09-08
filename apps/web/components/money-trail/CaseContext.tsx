@@ -83,6 +83,15 @@ export default function CaseContext({ caseContext, visibleHops }: CaseContextPro
         </span>
       </div>
 
+      {caseContext.complaintRef !== undefined && (
+        <CaseField
+          label="Complaint"
+          value={caseContext.complaintRef}
+          mono
+          title="The complaint reference this case was opened on."
+        />
+      )}
+
       <span aria-hidden className="hidden h-7 w-px bg-slate-800 sm:block" />
 
       <CaseField label="Typology" value={caseContext.typology} title={caseContext.typology} grow />

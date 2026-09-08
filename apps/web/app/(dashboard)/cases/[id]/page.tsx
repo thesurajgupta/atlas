@@ -1,23 +1,23 @@
-import { notFound } from "next/navigation";
-import { getCaseById, MOCK_CASES } from "@/lib/mock-data";
-import { WorkItemShell } from "@/components/work-item/WorkItemShell";
+import { CaseDetail } from "@/components/work-item/CaseDetail";
 
-export function generateStaticParams() {
-  return MOCK_CASES.map((c) => ({ id: c.case_id }));
-}
-
-// Next 15+ passes `params` as a Promise, so it has to be awaited. Written
-// against Next 14, where it was a plain object; the upgrade to 16 (done to
-// clear CVE-2025-29927) changed the contract, and neither `tsc` nor
-// `next build` caught it — the route just 404s at runtime.
+/**
+ * One case, by public reference.
+ *
+ * `generateStaticParams` is gone with the fixture-only version of this route.
+ * The case a demo opens is minted in the browser at submission time, so its
+ * reference cannot be known at build time, and pre-rendering a list of fixture
+ * ids while the real target 404s is worse than not pre-rendering at all.
+ *
+ * Next passes `params` as a Promise, so it has to be awaited. This route was
+ * written against Next 14, where it was a plain object; the upgrade to 16 (done
+ * to clear CVE-2025-29927) changed the contract, and neither `tsc` nor
+ * `next build` caught it — the route just 404d at runtime.
+ */
 export default async function CaseDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const item = getCaseById(id);
-  if (!item) notFound();
-
-  return <WorkItemShell item={item} />;
+  return <CaseDetail caseId={decodeURIComponent(id)} />;
 }

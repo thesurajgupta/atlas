@@ -1,11 +1,19 @@
 "use client";
 
+import { CaseBanner } from "@/components/demo/CaseBanner";
 import { PageHeader } from "@/components/nav/PageHeader";
 import CashOutMap, {
   KIND_COLOR as MARKER_KIND_COLOR,
   RISK_COLOR as MARKER_RISK_COLOR,
   type CashOutMapPoint,
 } from "@/components/map/CashOutMap";
+import {
+  CASH_OUT_ENDPOINTS,
+  RING_RADII_KM,
+  SEARCH_ORIGIN,
+} from "@/lib/demo/endpoints";
+import { useDemoCase } from "@/lib/demo/store";
+import type { DemoCase } from "@/lib/demo/types";
 import { destinationPoint } from "@/lib/geo";
 
 import { useMemo, useState, type ReactNode } from "react";
@@ -57,266 +65,97 @@ type Endpoint = {
   bearing: number;
   probability: number;
   priority: Priority;
-  factors: { label: string; weight: number }[];
-  activity: { at: string; amount: string; account: string; status: string }[];
+  // `readonly`, because these arrive from the shared catalogue in
+  // `lib/demo/endpoints`, which is frozen by its own types. A mutable
+  // annotation here would silently claim this page may edit the catalogue.
+  factors: readonly { readonly label: string; readonly weight: number }[];
+  activity: readonly {
+    readonly at: string;
+    readonly amount: string;
+    readonly account: string;
+    readonly status: string;
+  }[];
 };
 
 /**
- * The last confirmed hop: the centre of the search, and the point every
- * distance on this screen is measured from.
- *
- * A synthetic location, at a real coordinate in the Delhi NCR region. Real, so
- * that the scale bar and the distance column mean something against the ground
- * under them; synthetic in that no complaint put it there.
- *
- * Deliberately not the New Delhi city point: the basemap labels that, and an
- * origin sitting exactly on it would put the place name underneath the marker
- * cluster where neither can be read.
+ * The origin and the catalogue both moved to `lib/demo/endpoints`, so this
+ * page, the ranked-locations page, the prediction and the alert all measure
+ * from the same point and name the same places. They were declared here, which
+ * is how "the map shows a different top candidate from the alert" becomes
+ * possible in the first place.
  */
-const ORIGIN = { latitude: 28.664, longitude: 77.312, label: "the last confirmed hop" } as const;
+const ORIGIN = SEARCH_ORIGIN;
 
-/** Search-radius rings, in kilometres — the same 2 / 5 / 10 the schematic drew. */
-const RING_RADII_KM = [2, 5, 10] as const;
+/**
+ * Project a catalogue entry onto this page's row shape.
+ *
+ * With no case referred, `baselineScore` is what the map has always shown and
+ * nothing changes. With a case referred, the score, the priority and the
+ * factors come from that case's ranking — the same numbers `/predicted-locations`
+ * lists and the alert quotes — and the case's own withdrawals are prepended to
+ * the activity table, marked as belonging to it.
+ *
+ * Endpoints the case did not rank keep their baseline. They are still real
+ * candidates on the map; they are simply not ones this case's evidence reached.
+ */
+function endpointsFor(activeCase: DemoCase | null): Endpoint[] {
+  const ranked = new Map((activeCase?.locations ?? []).map((l) => [l.endpoint_id, l]));
 
-const ENDPOINTS: Endpoint[] = [
-  {
-    id: "EP_DEL_0783",
-    ref: "Bank A ATM – Sector 12",
-    kind: "ATM",
-    operator: "Bank A",
-    area: "Ward 3, North district",
-    distanceKm: 2.4,
-    probability: 92,
-    priority: "high",
-    bearing: 34,
-    factors: [
-      { label: "Multiple mule accounts linked", weight: 25 },
-      { label: "High-value cash withdrawals", weight: 20 },
-      { label: "Transactions in short time frame", weight: 18 },
-      { label: "Matches known mule pattern", weight: 15 },
-      { label: "Proximity to other flagged endpoints", weight: 14 },
-    ],
-    activity: [
-      { at: "05 Sep, 10:24", amount: "₹40,000", account: "XXXX6789", status: "Flagged" },
-      { at: "05 Sep, 09:18", amount: "₹25,000", account: "XXXX4321", status: "Flagged" },
-      { at: "04 Sep, 19:11", amount: "₹50,000", account: "XXXX9876", status: "Under review" },
-      { at: "04 Sep, 18:33", amount: "₹20,000", account: "XXXX3456", status: "Normal" },
-      { at: "03 Sep, 11:12", amount: "₹30,000", account: "XXXX7890", status: "Flagged" },
-    ],
-  },
-  {
-    id: "EP_DEL_1092",
-    ref: "Bank B ATM – Ward 4",
-    kind: "ATM",
-    operator: "Bank B",
-    area: "Ward 4, Central district",
-    distanceKm: 4.8,
-    probability: 78,
-    priority: "high",
-    bearing: 118,
-    factors: [
-      { label: "Two trail accounts withdrew here", weight: 22 },
-      { label: "Night-window volume above median", weight: 19 },
-      { label: "Shared operator device fingerprint", weight: 16 },
-    ],
-    activity: [
-      { at: "05 Sep, 08:02", amount: "₹35,000", account: "XXXX1122", status: "Flagged" },
-      { at: "04 Sep, 22:47", amount: "₹45,000", account: "XXXX7788", status: "Under review" },
-    ],
-  },
-  {
-    id: "EP_DEL_2210",
-    ref: "Bank C Branch – Ward 9",
-    kind: "Branch",
-    operator: "Bank C",
-    area: "Ward 9, South district",
-    distanceKm: 6.1,
-    probability: 64,
-    priority: "medium",
-    bearing: 205,
-    factors: [
-      { label: "One trail account holds an account here", weight: 20 },
-      { label: "Counter withdrawals rising over 14 days", weight: 14 },
-    ],
-    activity: [
-      { at: "03 Sep, 11:12", amount: "₹30,000", account: "XXXX7890", status: "Flagged" },
-    ],
-  },
-  {
-    id: "EP_DEL_3341",
-    ref: "Bank A BC agent – Ward 7",
-    kind: "Branch",
-    operator: "Bank A",
-    area: "Ward 7, North district",
-    distanceKm: 9.3,
-    probability: 52,
-    priority: "medium",
-    bearing: 302,
-    factors: [
-      { label: "AePS volume above agent median", weight: 17 },
-      { label: "Proximity only — no trail account seen", weight: 9 },
-    ],
-    activity: [],
-  },
-  {
-    id: "EP_DEL_4408",
-    ref: "Bank D ATM – Ward 12",
-    kind: "ATM",
-    operator: "Bank D",
-    area: "Ward 12, West district",
-    distanceKm: 12.7,
-    probability: 31,
-    priority: "low",
-    bearing: 248,
-    factors: [{ label: "Within outer search radius only", weight: 8 }],
-    activity: [],
-  },
-  {
-    id: "EP_DEL_5127",
-    ref: "Bank B Branch – Ward 5",
-    kind: "Branch",
-    operator: "Bank B",
-    area: "Ward 5, East district",
-    distanceKm: 14.2,
-    probability: 26,
-    priority: "low",
-    bearing: 76,
-    factors: [{ label: "Within outer search radius only", weight: 7 }],
-    activity: [],
-  },
+  return CASH_OUT_ENDPOINTS.map((entry) => {
+    const rank = ranked.get(entry.id);
+    const score = rank === undefined ? entry.baselineScore : Math.round(rank.score * 100);
+    const priority: Priority =
+      rank === undefined ? entry.priority : rank.risk === "HIGH" ? "high" : rank.risk === "MEDIUM" ? "medium" : "low";
 
-  /* --- out-of-district candidates ---------------------------------------
-   *
-   * A cash-out is not bounded by the district the complaint was filed in.
-   * Mule networks move value between states precisely because that is where
-   * a jurisdiction boundary sits, so a screen that only ever drew the local
-   * ring would hide the case's most interesting candidates and would make the
-   * national basemap pointless.
-   *
-   * These are the same synthetic construction as the block above — a ward and
-   * a bearing, not a premises. The region names are geography, which is real;
-   * nothing about the endpoint is.
-   */
-  {
-    id: "EP_MUM_2841",
-    ref: "Bank B ATM – Ward 2",
-    kind: "ATM",
-    operator: "Bank B",
-    area: "Ward 2, Maharashtra region",
-    distanceKm: 1149,
-    probability: 71,
-    priority: "high",
-    bearing: 203.8,
-    factors: [
-      { label: "Trail account opened in this circle", weight: 21 },
-      { label: "Operator seen in two earlier cases", weight: 18 },
-      { label: "Withdrawal window matches the pattern", weight: 15 },
-    ],
-    activity: [
-      { at: "05 Sep, 07:41", amount: "₹48,000", account: "XXXX2244", status: "Flagged" },
-      { at: "04 Sep, 21:05", amount: "₹42,000", account: "XXXX9911", status: "Under review" },
-    ],
-  },
-  {
-    id: "EP_LKO_3390",
-    ref: "Bank C ATM – Ward 8",
-    kind: "ATM",
-    operator: "Bank C",
-    area: "Ward 8, Uttar Pradesh region",
-    distanceKm: 412.7,
-    probability: 58,
-    priority: "medium",
-    bearing: 117.3,
-    factors: [
-      { label: "One trail account withdrew in this circle", weight: 19 },
-      { label: "Volume above circle median", weight: 12 },
-    ],
-    activity: [
-      { at: "04 Sep, 16:22", amount: "₹28,000", account: "XXXX5510", status: "Under review" },
-    ],
-  },
-  {
-    id: "EP_JAI_4712",
-    ref: "Bank A Branch – Ward 1",
-    kind: "Branch",
-    operator: "Bank A",
-    area: "Ward 1, Rajasthan region",
-    distanceKm: 244.1,
-    probability: 55,
-    priority: "medium",
-    bearing: 220.3,
-    factors: [
-      { label: "Counter withdrawals rising over 14 days", weight: 16 },
-      { label: "Shared operator device fingerprint", weight: 13 },
-    ],
-    activity: [],
-  },
-  {
-    id: "EP_KOL_5508",
-    ref: "Bank D ATM – Ward 11",
-    kind: "ATM",
-    operator: "Bank D",
-    area: "Ward 11, West Bengal region",
-    distanceKm: 1299,
-    probability: 47,
-    priority: "medium",
-    bearing: 118.6,
-    factors: [{ label: "AePS volume above agent median", weight: 15 }],
-    activity: [],
-  },
-  {
-    id: "EP_PAT_6134",
-    ref: "Bank C BC agent – Ward 14",
-    kind: "Branch",
-    operator: "Bank C",
-    area: "Ward 14, Bihar region",
-    distanceKm: 846.3,
-    probability: 38,
-    priority: "low",
-    bearing: 111.2,
-    factors: [{ label: "AePS volume above agent median", weight: 11 }],
-    activity: [],
-  },
-  {
-    id: "EP_NAG_6820",
-    ref: "Bank A ATM – Ward 6",
-    kind: "ATM",
-    operator: "Bank A",
-    area: "Ward 6, Madhya Pradesh region",
-    distanceKm: 849.3,
-    probability: 34,
-    priority: "low",
-    bearing: 167,
-    factors: [{ label: "Corridor endpoint only — no trail account seen", weight: 9 }],
-    activity: [],
-  },
-  {
-    id: "EP_HYD_7266",
-    ref: "Bank B Branch – Ward 10",
-    kind: "Branch",
-    operator: "Bank B",
-    area: "Ward 10, Telangana region",
-    distanceKm: 1252.1,
-    probability: 29,
-    priority: "low",
-    bearing: 174,
-    factors: [{ label: "Corridor endpoint only — no trail account seen", weight: 8 }],
-    activity: [],
-  },
-  {
-    id: "EP_BLR_8093",
-    ref: "Bank D ATM – Ward 13",
-    kind: "ATM",
-    operator: "Bank D",
-    area: "Ward 13, Karnataka region",
-    distanceKm: 1738.8,
-    probability: 24,
-    priority: "low",
-    bearing: 178.8,
-    factors: [{ label: "Corridor endpoint only — no trail account seen", weight: 7 }],
-    activity: [],
-  },
+    const caseActivity =
+      activeCase === null
+        ? []
+        : activeCase.transactions
+            .filter((txn) => txn.to_account === entry.id)
+            .map((txn) => ({
+              at: `${txn.occurred_at.slice(8, 10)} ${MONTH_ABBR[Number(txn.occurred_at.slice(5, 7)) - 1] ?? ""}, ${txn.occurred_at.slice(11, 16)}`,
+              amount: rupees(txn.amount_inr),
+              account: txn.from_account,
+              status: "This case",
+            }));
+
+    return {
+      id: entry.id,
+      ref: entry.ref,
+      kind: entry.kind,
+      operator: entry.operator,
+      area: entry.area,
+      distanceKm: entry.distanceKm,
+      bearing: entry.bearing,
+      probability: score,
+      priority,
+      factors:
+        rank === undefined
+          ? entry.factors
+          : // The case's own reasons, weighted by what each feature actually
+            // contributed to this score. Not the catalogue's generic factors:
+            // those describe the endpoint, these describe why it is on *this*
+            // case's list.
+            rank.features
+              .map((feature, index) => ({
+                label: rank.reasons[index] ?? feature.name.replace(/_/g, " "),
+                weight: Math.round(feature.value * feature.weight * 100),
+              }))
+              .filter((factor) => factor.weight > 0)
+              .slice(0, 5),
+      activity: [...caseActivity, ...entry.activity],
+    };
+  });
+}
+
+const MONTH_ABBR = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+
+function rupees(value: number): string {
+  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
 
 const TONE: Record<Priority, { dot: string; text: string; chipBg: string; chipFg: string }> = {
   high: { dot: "#E5484D", text: "#F2686C", chipBg: "#3B1517", chipFg: "#F2686C" },
@@ -326,16 +165,15 @@ const TONE: Record<Priority, { dot: string; text: string; chipBg: string; chipFg
 
 const PRIORITY_LABEL: Record<Priority, string> = { high: "High", medium: "Medium", low: "Low" };
 
-// `noUncheckedIndexedAccess` is on, so ENDPOINTS[0] is Endpoint | undefined.
-// A guarded helper gives the constant a non-optional *return type*, which
-// survives into the component body — a plain `if (!x) throw` at module scope
-// does not, because the narrowing is not carried into a nested closure.
+// `noUncheckedIndexedAccess` is on, so `list[0]` is `Endpoint | undefined`. A
+// guarded helper gives a non-optional *return type*, which survives into the
+// component body — a plain `if (!x) throw` does not, because the narrowing is
+// not carried into a nested closure.
 function requireFirst(list: readonly Endpoint[]): Endpoint {
   const first = list[0];
-  if (!first) throw new Error("ENDPOINTS fixture must not be empty");
+  if (!first) throw new Error("The cash-out endpoint catalogue must not be empty");
   return first;
 }
-const DEFAULT_ENDPOINT = requireFirst(ENDPOINTS);
 
 /**
  * Distances here run from 2 km to over 1,700, so a fixed unit reads badly at
@@ -354,26 +192,29 @@ function formatDistance(km: number): string {
 const isPredictedOnly = (endpoint: Endpoint) => endpoint.activity.length === 0;
 
 /**
- * Every endpoint as a map point, resolved once at module scope.
+ * Every endpoint as a map point.
  *
- * Not in a `useMemo`: the fixture never changes, and the identity has to be
+ * Held behind a `useMemo` keyed on the referred case: the identity has to be
  * stable across renders — the map builds one marker per entry and would
- * otherwise rebuild all of them on every keystroke elsewhere on the page.
+ * otherwise rebuild all of them on every keystroke elsewhere on the page — but
+ * it does have to change when a case arrives and re-scores the list.
  *
  * The distance is formatted here rather than in the map so the popup and the
  * table's distance column cannot drift apart.
  */
-const MAP_POINTS: readonly CashOutMapPoint[] = ENDPOINTS.map((endpoint) => ({
-  ...destinationPoint(ORIGIN, endpoint.bearing, endpoint.distanceKm),
-  id: endpoint.id,
-  label: endpoint.ref,
-  kind: endpoint.kind,
-  operator: endpoint.operator,
-  area: endpoint.area,
-  priority: endpoint.priority,
-  probability: endpoint.probability,
-  distanceLabel: formatDistance(endpoint.distanceKm),
-}));
+function toMapPoints(endpoints: readonly Endpoint[]): readonly CashOutMapPoint[] {
+  return endpoints.map((endpoint) => ({
+    ...destinationPoint(ORIGIN, endpoint.bearing, endpoint.distanceKm),
+    id: endpoint.id,
+    label: endpoint.ref,
+    kind: endpoint.kind,
+    operator: endpoint.operator,
+    area: endpoint.area,
+    priority: endpoint.priority,
+    probability: endpoint.probability,
+    distanceLabel: formatDistance(endpoint.distanceKm),
+  }));
+}
 
 /* --- small inline icons; no new dependency, matching the shell's approach --- */
 const I = {
@@ -455,7 +296,26 @@ type Kind = Endpoint["kind"];
 type Evidence = "predicted" | "observed";
 
 export default function MapPage() {
-  const [selectedId, setSelectedId] = useState(DEFAULT_ENDPOINT.id);
+  const { activeCase } = useDemoCase();
+
+  // Re-scored when a case is referred, and stable in between. Everything below
+  // — the ranked table, the marker colours, the detail panel — reads from this
+  // one list, so the map cannot rank an endpoint differently from the page that
+  // sent the investigator here.
+  const endpoints = useMemo(() => endpointsFor(activeCase), [activeCase]);
+  const mapPoints = useMemo(() => toMapPoints(endpoints), [endpoints]);
+  const defaultEndpoint = requireFirst(
+    // Highest-scoring first, so the endpoint the case is actually about is the
+    // one selected on arrival.
+    [...endpoints].sort((a, b) => b.probability - a.probability),
+  );
+
+  // `null` means "follow the ranking". A seeded id would stick to whatever was
+  // top before the referred case hydrated.
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const selectedId = pinnedId ?? defaultEndpoint.id;
+  const setSelectedId = setPinnedId;
+
   const [riskShown, setRiskShown] = useState<Record<Priority, boolean>>({
     high: true,
     medium: true,
@@ -473,17 +333,17 @@ export default function MapPage() {
   // marker visibility instead of rebuilding every marker.
   const shown = useMemo(
     () =>
-      ENDPOINTS.filter(
+      endpoints.filter(
         (e) =>
           riskShown[e.priority] &&
           kindShown[e.kind] &&
           evidenceShown[isPredictedOnly(e) ? "predicted" : "observed"],
       ),
-    [riskShown, kindShown, evidenceShown],
+    [endpoints, riskShown, kindShown, evidenceShown],
   );
   const ranked = useMemo(() => [...shown].sort((a, b) => b.probability - a.probability), [shown]);
   const visibleIds = useMemo(() => new Set(shown.map((e) => e.id)), [shown]);
-  const selected = ENDPOINTS.find((e) => e.id === selectedId) ?? DEFAULT_ENDPOINT;
+  const selected = endpoints.find((e) => e.id === selectedId) ?? defaultEndpoint;
   const tone = TONE[selected.priority];
 
   const circ = 2 * Math.PI * 42;
@@ -506,6 +366,8 @@ export default function MapPage() {
         }
       />
       <div className="px-5 py-5 text-ink-900">
+      <CaseBanner page="The map" />
+
       {/* ---------------- stat row ---------------- */}
       <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
         <Stat icon={I.pin} tone="#4A8CD4" value="1,842" label="Total locations" />
@@ -523,7 +385,7 @@ export default function MapPage() {
         <section className="relative flex min-h-[480px] flex-col overflow-hidden rounded-lg border border-line bg-surface">
           <CashOutMap
             className="w-full flex-1"
-            points={MAP_POINTS}
+            points={mapPoints}
             visibleIds={visibleIds}
             origin={ORIGIN}
             ringRadiiKm={RING_RADII_KM}
@@ -614,10 +476,24 @@ export default function MapPage() {
         </section>
 
         <section className="rounded-lg border border-line bg-raised p-3">
-          <h2 className="mb-1 text-[15px] font-semibold">Predicted cash-out locations</h2>
+          <h2 className="mb-1 text-[15px] font-semibold">
+            {activeCase === null
+              ? "Predicted cash-out locations"
+              : `Ranked for ${activeCase.case_id}`}
+          </h2>
           <p className="mb-3 text-[11px] leading-relaxed text-ink-500">
-            Mock figures for interface development. Live values come only from a validated,
-            calibrated model run — there is no trained model yet.
+            {activeCase === null ? (
+              <>
+                Baseline figures for interface development. Refer a complaint from the reporting
+                portal and this list is re-scored against that case&rsquo;s own trail.
+              </>
+            ) : (
+              <>
+                Scored against this case&rsquo;s trail — the same ranking{" "}
+                <span className="text-ink-700">Predicted locations</span> lists and the alert
+                quotes. An ordering for tasking, not a calibrated probability.
+              </>
+            )}
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[12px]">
