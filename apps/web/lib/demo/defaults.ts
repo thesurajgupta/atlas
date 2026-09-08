@@ -9,10 +9,18 @@
  * ## Why the incident time is relative
  *
  * The transaction chain the API builds is laid out from the incident instant,
- * and the golden-hour position every screen reports is measured from it.
- * Defaulting the incident to five hours ago gives a case whose layering has
- * already happened and whose cash-out has not — which is the situation the
- * product exists for, and the one worth standing in front of.
+ * and the golden-hour position every screen reports is measured from it. The
+ * default puts the incident far enough back that layering has happened and
+ * close enough that the money can still be stopped — which is the situation
+ * the product exists for, and the one worth standing in front of.
+ *
+ * **It has to sit inside the golden hour**, and that is a hard constraint, not
+ * a preference. `atlas.alerts.policy` refuses to raise an alert more than an
+ * hour after fraud initiation, on the grounds that such an alert claims an
+ * interception that is no longer possible. A default outside that window
+ * therefore ends the demonstration one stage early, on a correct refusal that
+ * looks exactly like a failure — which is what the first version of this file
+ * did at a five-hour lag.
  *
  * A fixed calendar date would drift out of that relationship the day after it
  * was written, so it is computed instead. It must be computed **on the client**
@@ -39,13 +47,20 @@ export interface ComplaintDraft {
   supporting_document: string | null;
 }
 
-/** How far before filing the default incident sits. See the module docstring. */
-const DEFAULT_INCIDENT_LAG_HOURS = 5;
+/**
+ * How far before filing the default incident sits.
+ *
+ * Eighteen minutes: enough for the layering hops to have happened, and roughly
+ * forty minutes of the golden hour still on the clock when the complaint
+ * reaches ATLAS. Any value at or past sixty ends the run on a suppressed
+ * alert — see the module docstring.
+ */
+const DEFAULT_INCIDENT_LAG_MINUTES = 18;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
 export function defaultComplaintDraft(now: Date = new Date()): ComplaintDraft {
-  const incident = new Date(now.getTime() - DEFAULT_INCIDENT_LAG_HOURS * 60 * 60_000);
+  const incident = new Date(now.getTime() - DEFAULT_INCIDENT_LAG_MINUTES * 60_000);
   // Rounded to five minutes so the timestamps on screen read like something a
   // person reported rather than a machine stamped.
   incident.setMinutes(Math.floor(incident.getMinutes() / 5) * 5, 0, 0);

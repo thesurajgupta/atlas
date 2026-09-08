@@ -9,56 +9,19 @@ import {
   ArrowLeft, ArrowRight, Send, X, FileUp, Calendar
 } from 'lucide-react';
 
-// --- MOCK DATA ---
-const SUSPECTS_DATA = [
-  {
-    id: 'S-01',
-    name: 'Rohit Sharma',
-    riskScore: 92,
-    status: 'Under Investigation',
-    dob: '12 Mar 1992',
-    gender: 'Male',
-    mobile: '+91 98765 43210',
-    email: 'rohit.sharma2@gmail.com',
-    address: 'Nagoi Nagar, India',
-    kyc: 'Verified',
-    timeline: [
-      { event: 'Unusual Transfer Flagged', time: '05 Sep 2025, 08:24 AM', status: 'high' },
-      { event: 'Device Binding Change', time: '05 Sep 2025, 01:24 PM', status: 'medium' }
-    ]
-  },
-  {
-    id: 'S-02',
-    name: 'Amit Verma',
-    riskScore: 45,
-    status: 'Person of Interest',
-    dob: '18 Aug 1988',
-    gender: 'Male',
-    mobile: '+91 91234 56789',
-    email: 'amit.verma88@gmail.com',
-    address: 'Rohini Sector 7, Delhi',
-    kyc: 'Pending',
-    timeline: [
-      { event: 'Account Linked to IP', time: '04 Sep 2025, 11:10 PM', status: 'low' }
-    ]
-  },
-  {
-    id: 'S-03',
-    name: 'Priya Nair',
-    riskScore: 18,
-    status: 'Victim',
-    dob: '04 Jun 1995',
-    gender: 'Female',
-    mobile: '+91 99887 76655',
-    email: 'pnair_95@outlook.com',
-    address: 'Indiranagar, Bengaluru',
-    kyc: 'Verified',
-    timeline: [
-      { event: 'Report Submitted', time: '05 Sep 2025, 07:15 AM', status: 'info' }
-    ]
-  }
-];
+/**
+ * How a trail position is shown. The money's route through the case, which is
+ * a property of the graph — not an assessment of a person.
+ */
+const ROLE_LABEL = {
+  VICTIM: 'Origin · victim',
+  MULE: 'Pass-through',
+  TERMINAL: 'Money stopped here',
+} as const;
 
+const ROLE_INITIAL = { VICTIM: 'V', MULE: 'P', TERMINAL: 'T' } as const;
+
+// --- MOCK DATA ---
 const EVIDENCE_ITEMS = [
   {
     id: 'E-101',
@@ -100,7 +63,7 @@ const EVIDENCE_ITEMS = [
 
 const CASE_DETAILS_DATA = {
   caseId: 'C-4501',
-  title: 'Phishing Fraud Operation - Rohit Sharma',
+  title: 'No case loaded — run an investigation',
   severity: 'Critical',
   assignedTo: 'Inspector [Delhi Cyber Cell]',
   dateOpened: '05 Sep 2025',
@@ -177,13 +140,39 @@ export default function InvestigationDashboard() {
         { id: 'T1', title: 'Cloned Account Created', amount: undefined, date: '05 Sep 2025', detail: 'Fake account initialized via TOR Proxy' },
         { id: 'T2', title: 'Funds Transfer', amount: undefined, date: '05 Sep 2025', detail: 'Transferred to a mule account' },
         { id: 'T3', title: 'ATM Withdrawal Attempt', amount: undefined, date: '05 Sep 2025', detail: 'CCTV triggered' },
-        { id: 'T4', title: 'Device Forensics', amount: undefined, date: '06 Sep 2025', detail: 'IMEI matched to primary suspect' },
+        { id: 'T4', title: 'Endpoint Review', amount: undefined, date: '06 Sep 2025', detail: 'Withdrawal endpoint matched to a prior case' },
         { id: 'T5', title: 'Evidence Acquisition', amount: undefined, date: '07 Sep 2025', detail: 'Statements and logs secured' },
       ];
 
+  /**
+   * The entities the trail actually walked.
+   *
+   * This tab used to list invented people — names, dates of birth, home
+   * addresses, mobile numbers, and a "risk score" against each. ATLAS does not
+   * do that. It forecasts the cash-out leg of reported fraud and never scores
+   * individuals (`docs/NON-GOALS.md`), so a per-person risk number is not a
+   * feature this product withholds — it is a claim it is built not to make.
+   *
+   * What a case does have is accounts: where the money went, how much reached
+   * each one, and which of them the money never left. Every field below is read
+   * off the reconstructed trail, so the list is empty until a case is loaded
+   * rather than falling back to a cast of characters.
+   */
+  const trailAccounts = (caseView?.nodes ?? []).map((node) => ({
+    id: node.id,
+    label: node.label,
+    role: node.role,
+    // The victim receives nothing on their own trail — they sent. Their figure
+    // is the amount the complaint reported, or the card reads "₹0 reported
+    // lost" beside a case worth lakhs.
+    amount: node.role === 'VICTIM' ? (caseView?.reportedAmount ?? 0) : node.received,
+    account: node.account,
+    firstSeen: node.firstSeen,
+  }));
+
   // State Management
   const [activeTab, setActiveTab] = useState<'caseDetails' | 'suspects' | 'evidence'>('suspects');
-  const [selectedSuspect, setSelectedSuspect] = useState(SUSPECTS_DATA[0]!);  // module-level literal, never empty
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 2;
 
@@ -195,7 +184,7 @@ export default function InvestigationDashboard() {
   // Dynamic Case Notes State
   const [notes, setNotes] = useState([
     { id: 1, author: 'Inspector [Delhi Cyber Cell]', text: 'Threaded, secured, and automatically timestamped entry.', time: '05 Sep 2025, 08:22 AM' },
-    { id: 2, author: 'Inspector [Delhi Cyber Cell]', text: 'Primary suspect identified via IMEI cross-match.', time: '05 Sep 2025, 11:45 AM' }
+    { id: 2, author: 'Inspector [Delhi Cyber Cell]', text: 'Beneficiary bank contacted for a hold on the terminal account.', time: '05 Sep 2025, 11:45 AM' }
   ]);
   const [newNote, setNewNote] = useState('');
 
@@ -242,8 +231,11 @@ export default function InvestigationDashboard() {
   };
 
   // Pagination Helper
-  const totalPages = Math.ceil(SUSPECTS_DATA.length / itemsPerPage);
-  const paginatedSuspects = SUSPECTS_DATA.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(trailAccounts.length / itemsPerPage));
+  const paginatedAccounts = trailAccounts.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  );
 
   return (
     <div className="flex h-full bg-paper text-ink-700 overflow-hidden">
@@ -347,7 +339,7 @@ export default function InvestigationDashboard() {
                     : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
-                Suspects / Victims ({SUSPECTS_DATA.length})
+                Accounts in trail ({trailAccounts.length})
               </button>
               <button 
                 onClick={() => setActiveTab('evidence')}
@@ -423,13 +415,19 @@ export default function InvestigationDashboard() {
 
               {/* TAB 2: SUSPECTS / VICTIMS */}
               {activeTab === 'suspects' && (
+                trailAccounts.length === 0 ? (
+                  <p className="rounded-xl border border-line bg-surface p-6 text-xs leading-relaxed text-ink-500">
+                    No trail is loaded. Register a complaint and the accounts the money passed
+                    through are listed here, with what reached each one.
+                  </p>
+                ) : (
                 <div className="grid grid-cols-2 gap-4">
-                  {paginatedSuspects.map((suspect) => (
+                  {paginatedAccounts.map((entry) => (
                     <div 
-                      key={suspect.id}
-                      onClick={() => setSelectedSuspect(suspect)}
+                      key={entry.id}
+                      onClick={() => setSelectedAccountId(entry.id)}
                       className={`bg-surface border rounded-xl p-4 cursor-pointer transition-all space-y-4 ${
-                        selectedSuspect.id === suspect.id 
+                        selectedAccountId === entry.id 
                           ? 'border-blue-500 ring-1 ring-blue-500/50 shadow-lg' 
                           : 'border-line hover:border-line-strong'
                       }`}
@@ -437,33 +435,52 @@ export default function InvestigationDashboard() {
                       <div className="flex items-start justify-between">
                         <div className="flex items-center space-x-3">
                           <div className="w-10 h-10 bg-raised rounded-lg flex items-center justify-center font-bold text-ink-700">
-                            {suspect.name.charAt(0)}
+                            {ROLE_INITIAL[entry.role]}
                           </div>
                           <div>
-                            <h4 className="font-semibold text-ink-900 text-sm">{suspect.name}</h4>
+                            <h4 className="font-semibold text-ink-900 text-sm">{entry.label}</h4>
                             <div className="flex items-center space-x-2 mt-0.5">
-                              <span className="text-rose-400 font-bold text-xs">{suspect.riskScore}</span>
-                              <span className="text-[10px] text-ink-500">Risk Score</span>
+                              <span className="text-ink-900 font-bold text-xs tabular-nums">
+                                {formatRupees(entry.amount)}
+                              </span>
+                              <span className="text-[10px] text-ink-500">
+                                {entry.role === 'VICTIM' ? 'Reported lost' : 'Received'}
+                              </span>
                             </div>
                           </div>
                         </div>
+                        {/* Position in the trail, not a rating of anybody. */}
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
-                          suspect.status === 'Under Investigation' 
+                          entry.role === 'TERMINAL' 
                             ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
-                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : entry.role === 'MULE'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                         }`}>
-                          {suspect.status}
+                          {ROLE_LABEL[entry.role]}
                         </span>
                       </div>
 
                       <div className="grid grid-cols-2 gap-y-1.5 text-xs border-t border-line pt-3 text-ink-700">
-                        <span className="text-ink-500">DOB:</span> <span>{suspect.dob}</span>
-                        <span className="text-ink-500">Mobile:</span> <span>{suspect.mobile}</span>
-                        <span className="text-ink-500">KYC:</span> <span className="text-emerald-400">{suspect.kyc}</span>
+                        <span className="text-ink-500">Bank:</span> <span>{entry.account.institution}</span>
+                        <span className="text-ink-500">Account:</span>{' '}
+                        <span className="font-mono">{entry.account.accountNumber}</span>
+                        <span className="text-ink-500">IFSC:</span>{' '}
+                        <span className="font-mono">{entry.account.ifsc}</span>
+                        <span className="text-ink-500">First seen:</span>{' '}
+                        <span>
+                          {entry.firstSeen
+                            ? new Date(entry.firstSeen).toLocaleString('en-IN', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })
+                            : '—'}
+                        </span>
                       </div>
                     </div>
                   ))}
                 </div>
+                )
               )}
 
               {/* TAB 3: EVIDENCE MANAGEMENT */}

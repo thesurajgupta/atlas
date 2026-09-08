@@ -162,10 +162,17 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
+    // ATLAS's own error handler returns `{error, message, correlation_id}`;
+    // `detail` is FastAPI's default shape, which a few paths still raise. Read
+    // `message` first, or every failure in the console degrades to the bare
+    // HTTP status text — "Not Found" where the API had written a sentence
+    // saying which thing was not found.
     const detail =
-      body && typeof body === "object" && "detail" in body
-        ? String((body as { detail: unknown }).detail)
-        : response.statusText;
+      body !== null && typeof body === "object" && "message" in body
+        ? String((body as { message: unknown }).message)
+        : body !== null && typeof body === "object" && "detail" in body
+          ? String((body as { detail: unknown }).detail)
+          : response.statusText;
     throw new ApiError(response.status, detail, correlationId);
   }
 

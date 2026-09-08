@@ -27,4 +27,14 @@ paths = [
 regexes = [
   '''change-me-locally''',
   '''generate-a-random-value-locally.*''',
+  # Browser storage keys. `const STORAGE_KEY = 'atlas.ncrp.complaint.v2'` is a
+  # `localStorage` key — a name, visible in devtools by design, carrying no
+  # authority at all — but it is a long dotted string, so the generic-api-key
+  # rule reads it as high entropy.
+  #
+  # Narrow on purpose: it matches only a `STORAGE_KEY` (or `_KEY`) constant
+  # whose value begins `atlas.` and holds nothing but dotted lowercase
+  # segments. A real credential cannot take that shape, so this does not widen
+  # the hole for anything else (CLAUDE.md rule 1).
+  '''(?i)_KEY\s*=\s*['"]atlas(\.[a-z0-9-]+)+['"]''',
 ]

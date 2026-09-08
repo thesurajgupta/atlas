@@ -81,13 +81,29 @@ export interface RunOptions {
 export async function runInvestigation(options: RunOptions = {}): Promise<DemoRun> {
   const mark = (k: StageKey, s: StageState) => options.onStage?.(k, s);
 
-  // Sign in if nobody is. Telling a presenter to go and sign in is a dead end at
-  // the worst moment; nothing is bypassed, the password and TOTP are still
-  // checked server-side.
-  if (!auth.isSignedIn()) {
-    await demoLogin(DEMO_USERNAME, DEMO_PASSWORD);
+  // Sign in *as the investigator* if that is not who is signed in.
+  //
+  // A bare `isSignedIn()` check was not enough. The pipeline writes a
+  // complaint, and the console can quite legitimately be holding the auditor's
+  // token — `/audit` tells a presenter in so many words to sign in as
+  // `demo.auditor` to read the log. That token makes `isSignedIn()` true, so
+  // the whole run would proceed as a role with no `complaint:write`, and
+  // because this system answers a forbidden record with 404 rather than 403,
+  // every stage failed with a bare "Not Found" and nothing said why.
+  //
+  // Nothing is bypassed: the password and TOTP are still checked server-side.
+  let profile = auth.isSignedIn() ? await getProfile().catch(() => null) : null;
+  if (profile === null || profile.username !== DEMO_USERNAME) {
+    // Falls back to whoever is signed in if the demo account is unavailable —
+    // deployed, where `demo-login` is a 404, or unseeded. The API is the
+    // authority on what that identity may do, and it will say so.
+    profile = await demoLogin(DEMO_USERNAME, DEMO_PASSWORD).catch(
+      (err: unknown) => {
+        if (profile !== null) return profile;
+        throw err;
+      },
+    );
   }
-  const profile = await getProfile();
 
   const now = new Date();
   const form = options.complaint;
