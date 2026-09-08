@@ -31,7 +31,7 @@ import {
 } from '@/lib/graph/cytoscape-adapter';
 import type { EntityLocationIndex } from '@/lib/graph/entity-location';
 import { PAYMENT_METHOD_COLOR, PAYMENT_METHOD_ORDER } from '@/lib/graph/payment-method';
-import { reduceTrailPaths } from '@/lib/graph/reducer';
+import { defaultExpandedNodeIds, reduceTrailPaths } from '@/lib/graph/reducer';
 import { bestMatch, searchTrail } from '@/lib/graph/search';
 import type { SyntheticCaseContext } from '@/lib/graph/synthetic-case';
 import type { CashOutChannel, EntityId, IsoDateTime, TrailPath } from '@/lib/graph/types';
@@ -127,8 +127,8 @@ export default function MoneyTrailGraph({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
   const [cyReady, setCyReady] = useState(false);
-  const [expandedNodeIds, setExpandedNodeIds] = useState<ReadonlySet<EntityId>>(
-    () => new Set([originEntityId]),
+  const [expandedNodeIds, setExpandedNodeIds] = useState<ReadonlySet<EntityId>>(() =>
+    defaultExpandedNodeIds({ originEntityId, paths }),
   );
   const [selectedNodeId, setSelectedNodeId] = useState<EntityId | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -142,7 +142,7 @@ export default function MoneyTrailGraph({
   const [renderedOrigin, setRenderedOrigin] = useState(originEntityId);
   if (renderedOrigin !== originEntityId) {
     setRenderedOrigin(originEntityId);
-    setExpandedNodeIds(new Set([originEntityId]));
+    setExpandedNodeIds(defaultExpandedNodeIds({ originEntityId, paths }));
     setSelectedNodeId(null);
   }
 

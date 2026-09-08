@@ -118,11 +118,12 @@ export default function EntityPanel({
             Entity detail
           </h2>
           <p className="text-ui-primary leading-relaxed text-slate-300">
-            Select a node to inspect the trail and expand one hop.
+            Select a node to inspect it, and to collapse or reopen its hops.
           </p>
           <p className="text-ui-secondary leading-relaxed text-slate-500">
-            The trail opens one hop at a time. Only the entities you have opened are drawn — the
-            rest of the reconstruction stays off the canvas until you ask for it.
+            The trail opens as far as it can be read at once. A reconstruction too large to draw
+            stops partway and leaves the rest collapsed — the header states how many of the known
+            entities are on the canvas.
           </p>
         </div>
       </aside>

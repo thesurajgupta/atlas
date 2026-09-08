@@ -14,7 +14,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { edgeCaption, reduceTrailPaths, shortEntityLabel } from './reducer';
+import {
+  defaultExpandedNodeIds,
+  edgeCaption,
+  reduceTrailPaths,
+  shortEntityLabel,
+} from './reducer';
 import type { CashOutChannel, MoneyEdgeType, TrailHop, TrailPath } from './types';
 
 /** Synthetic entity ids. The trailing digit is the only thing that varies. */
@@ -415,4 +420,69 @@ test('arguments that disagree about what was queried fail loudly', () => {
 
   assert.throws(() => reduceTrailPaths({ ...BASE, maxDepth: 0, paths: [] }), RangeError);
   assert.throws(() => reduceTrailPaths({ ...BASE, maxDepth: 1.5, paths: [] }), RangeError);
+});
+
+test('a trail within budget opens itself all the way to its endpoints', () => {
+  const paths = [
+    trail([
+      hop({ edge: EDGE_1, from: VICTIM, to: MULE_A, depth: 1 }),
+      hop({ edge: EDGE_2, from: MULE_A, to: MULE_B, depth: 2 }),
+      hop({ edge: EDGE_3, from: MULE_B, to: ENDPOINT, depth: 3, edgeType: 'WITHDREW_AT' }),
+    ]),
+  ];
+
+  const expandedNodeIds = defaultExpandedNodeIds({ originEntityId: VICTIM, paths });
+  const graph = reduceTrailPaths({ ...BASE, paths, expandedNodeIds });
+
+  // Every entity with an onward hop is open, so the whole reconstruction is on
+  // the canvas without a click.
+  assert.deepEqual([...expandedNodeIds].sort(), [VICTIM, MULE_A, MULE_B].sort());
+  assert.equal(
+    graph.nodes.filter((n) => n.expansion === 'COLLAPSED').length,
+    0,
+    'nothing is left collapsed',
+  );
+  // The endpoint is terminal, not collapsed — the money stopped there, and that
+  // is a finding rather than a hidden branch.
+  assert.equal(graph.nodes.find((n) => n.id === ENDPOINT)?.expansion, 'TERMINAL');
+});
+
+test('a trail over budget stops opening instead of trimming a half-drawn hop', () => {
+  const paths = [
+    trail([
+      hop({ edge: EDGE_1, from: VICTIM, to: MULE_A, depth: 1 }),
+      hop({ edge: EDGE_2, from: MULE_A, to: MULE_B, depth: 2 }),
+    ]),
+    trail([
+      hop({ edge: EDGE_3, from: VICTIM, to: MULE_A, depth: 1 }),
+      hop({ edge: EDGE_4, from: MULE_A, to: MULE_C, depth: 2 }),
+    ]),
+  ];
+
+  // Room for the origin and its first hop, but not for both of MULE_A's
+  // onward transfers. MULE_A therefore stays shut rather than showing one of
+  // its two branches, which would read as "the money stopped here".
+  const expandedNodeIds = defaultExpandedNodeIds({
+    originEntityId: VICTIM,
+    paths,
+    budget: 3,
+  });
+
+  assert.deepEqual([...expandedNodeIds], [VICTIM]);
+
+  const graph = reduceTrailPaths({ ...BASE, paths, expandedNodeIds });
+  assert.equal(graph.nodes.find((n) => n.id === MULE_A)?.expansion, 'COLLAPSED');
+});
+
+test('the default expansion is the same set whatever order paths arrive in', () => {
+  const first = trail([hop({ edge: EDGE_1, from: VICTIM, to: MULE_A, depth: 1 })]);
+  const second = trail([
+    hop({ edge: EDGE_2, from: VICTIM, to: MULE_B, depth: 1 }),
+    hop({ edge: EDGE_3, from: MULE_B, to: MULE_C, depth: 2 }),
+  ]);
+
+  assert.deepEqual(
+    [...defaultExpandedNodeIds({ originEntityId: VICTIM, paths: [first, second] })].sort(),
+    [...defaultExpandedNodeIds({ originEntityId: VICTIM, paths: [second, first] })].sort(),
+  );
 });

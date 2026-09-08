@@ -254,3 +254,78 @@ export function reduceTrailPaths(input: ReduceTrailPathsInput): MoneyTrailGraph 
     truncated: paths.some((path) => path.truncated),
   };
 }
+
+/**
+ * How many entities a trail may draw before it stops opening itself.
+ *
+ * Not a guess at what fits on screen — a canvas can be panned. It is the point
+ * past which a node-link diagram stops being readable at all and becomes the
+ * hairball that progressive disclosure exists to prevent. Reconstructions from
+ * the real graph run to thousands of accounts; the demo trails run to eight.
+ */
+export const DEFAULT_EXPANSION_BUDGET = 60;
+
+/**
+ * The expansion set a trail should open with.
+ *
+ * The console used to open on the origin alone, leaving an investigator to
+ * click out every hop before seeing the shape of the case. For a trail this
+ * size that is friction with nothing behind it — the reconstruction is already
+ * in the payload, and hiding it does not make it smaller.
+ *
+ * So a trail opens itself as far as it can. Breadth-first from the origin, a
+ * hop at a time, stopping at the first hop that would push the canvas past
+ * `budget`; everything past that stays collapsed and stays clickable. Large
+ * trails therefore still never render whole, which is the guarantee
+ * progressive disclosure was built for — they just start further along.
+ *
+ * The budget is checked *before* a hop opens rather than trimmed after. A hop
+ * opened halfway would show some of an entity's onward transfers and not the
+ * rest, which reads as "the money stopped here" — a finding — when it is only
+ * a display limit.
+ */
+export function defaultExpandedNodeIds({
+  originEntityId,
+  paths,
+  budget = DEFAULT_EXPANSION_BUDGET,
+}: {
+  readonly originEntityId: EntityId;
+  readonly paths: readonly TrailPath[];
+  readonly budget?: number;
+}): Set<EntityId> {
+  const outgoing = new Map<EntityId, Set<EntityId>>();
+  for (const path of paths) {
+    for (const hop of path.hops) {
+      const bucket = outgoing.get(hop.from_entity_id);
+      if (bucket === undefined) outgoing.set(hop.from_entity_id, new Set([hop.to_entity_id]));
+      else bucket.add(hop.to_entity_id);
+    }
+  }
+
+  const expanded = new Set<EntityId>();
+  const drawn = new Set<EntityId>([originEntityId]);
+  const frontier: EntityId[] = [originEntityId];
+
+  for (let i = 0; i < frontier.length; i += 1) {
+    const id = frontier[i];
+    if (id === undefined) continue;
+
+    // Sorted, so the set is a function of the trail rather than of the order
+    // the backend happened to return paths in — the same property the reducer's
+    // own sorts exist for. Without it, a trail at the budget could open to a
+    // different subgraph on two renders of identical data.
+    const targets = [...(outgoing.get(id) ?? [])].sort(compareStrings);
+    if (targets.length === 0) continue;
+
+    const added = targets.filter((target) => !drawn.has(target));
+    if (drawn.size + added.length > budget) continue;
+
+    expanded.add(id);
+    for (const target of added) {
+      drawn.add(target);
+      frontier.push(target);
+    }
+  }
+
+  return expanded;
+}
