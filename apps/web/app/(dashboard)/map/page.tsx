@@ -309,7 +309,29 @@ export default function MapPage() {
       .filter((e) => visible[e.risk.toLowerCase() as Priority]);
   }, [registry, endpoints, visible]);
   const ranked = useMemo(() => [...shown].sort((a, b) => b.probability - a.probability), [shown]);
-  const selected = endpoints.find((e) => e.id === selectedId) ?? DEFAULT_ENDPOINT;
+  const found = endpoints.find((e) => e.id === selectedId) ?? DEFAULT_ENDPOINT;
+
+  // With a case active the activity table shows *that case's* hops, not the
+  // fixture's. A withdrawal table listing amounts from no case in the system is
+  // the stray-number problem this integration exists to remove — and ATLAS has
+  // no withdrawal feed, so the honest content is the money that reached this
+  // trail, labelled as such.
+  const selected = caseView
+    ? {
+        ...found,
+        activity: caseView.hops.slice(0, 5).map((h) => ({
+          at: new Date(h.occurredAt).toLocaleString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          amount: `₹${h.amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+          account: h.toLabel,
+          status: h.depth >= 3 ? "Under review" : "Traced",
+        })),
+      }
+    : found;
   const tone = TONE[selected.priority];
 
   const circ = 2 * Math.PI * 42;
@@ -525,7 +547,9 @@ export default function MapPage() {
         </section>
 
         <section className="rounded-lg border border-line bg-raised p-3.5">
-          <h2 className="mb-2.5 text-[14px] font-semibold">Recent activity at this location</h2>
+          <h2 className="mb-2.5 text-[14px] font-semibold">
+            {caseView ? "Money that reached this trail" : "Recent activity at this location"}
+          </h2>
           {selected.activity.length === 0 ? (
             <p className="py-10 text-center text-[12px] text-[#5A6E88]">
               No withdrawals recorded in the retained window.

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, CheckCircle2, Clock } from "lucide-react";
+import { AlertCircle, ArrowRight, Check, CheckCircle2, Clock, Loader2, Wand2 } from "lucide-react";
 import {
   ApiError,
   auth,
@@ -14,6 +14,14 @@ import {
 } from "@/lib/api";
 import { PageHeader } from "@/components/nav/PageHeader";
 import { Card } from "@/components/ui/Card";
+import { syntheticAccount } from "@/lib/synthetic-bank";
+import {
+  runInvestigation,
+  STAGES,
+  type StageKey,
+  type StageState,
+} from "@/lib/run-investigation";
+import { PresentationControls } from "@/components/demo/PresentationMode";
 
 /**
  * Complaint intake (spec §11) — a real `POST /api/v1/complaints`.
@@ -60,6 +68,8 @@ export default function NewComplaintPage() {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<ApiComplaint | null>(null);
 
+  const [caseRef, setCaseRef] = useState("");
+  const [stages, setStages] = useState<Partial<Record<StageKey, StageState>>>({});
   const [typology, setTypology] = useState<FraudTypology>("DIGITAL_ARREST");
   const [amount, setAmount] = useState("");
   const [fraudStarted, setFraudStarted] = useState(localNow(45));
@@ -69,10 +79,11 @@ export default function NewComplaintPage() {
   const [narrative, setNarrative] = useState("");
 
   useEffect(() => {
-    if (!auth.isSignedIn()) {
-      router.replace("/login");
-      return;
-    }
+    // Deliberately no redirect to /login. This is where the demo starts, and
+    // bouncing a signed-out presenter away from the first page is the dead end
+    // the walkthrough already had to fix. `runInvestigation` signs in on submit;
+    // until then the form is fillable and the jurisdiction is resolved lazily.
+    if (!auth.isSignedIn()) return;
     getProfile()
       .then((p) => setJurisdiction(p.jurisdiction_id))
       .catch(() => setError("Could not read your jurisdiction. Try signing in again."));
@@ -96,25 +107,59 @@ export default function NewComplaintPage() {
     ? null
     : Math.max(0, Math.round((now - started) / 60_000));
 
+  /**
+   * Fill the form with one internally consistent synthetic scenario.
+   *
+   * Not random values: the beneficiary account and IFSC come from
+   * `lib/synthetic-bank`, generated from the case reference, so the account this
+   * complaint names is the same account the trail, network graph and report
+   * show. Random per-field values are what produce a demo that contradicts
+   * itself two screens later.
+   */
+  function autofill() {
+    const ref = `NCRP/2026/${Math.floor(100000 + Math.random() * 899999)}`;
+    const beneficiary = syntheticAccount(ref);
+    setCaseRef(ref);
+    setTypology("DIGITAL_ARREST");
+    setAmount("840000");
+    setFraudStarted(localNow(14));
+    setReportedAt(localNow());
+    setAccount(beneficiary.accountNumber);
+    setIfsc(beneficiary.ifsc);
+    setNarrative(
+      "Caller claimed to be from a courier firm, then a police officer, and kept the " +
+        "victim on a video call. Money transferred in three instalments to avoid limits.",
+    );
+    setError(null);
+  }
+
+  /**
+   * Register the complaint and run the investigation.
+   *
+   * The same `runInvestigation` the walkthrough uses — the complaint POST is
+   * stage one of it, so submitting here does not file a complaint and then
+   * separately pretend to analyse it. One pipeline, one case.
+   */
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!jurisdiction) return;
     setSubmitting(true);
     setError(null);
+    setStages({});
     try {
-      const complaint = await createComplaint({
-        public_ref: `NCRP/2026/${Math.floor(100000 + Math.random() * 899999)}`,
-        reported_at: new Date(reportedAt).toISOString(),
-        fraud_initiated_at: new Date(fraudStarted).toISOString(),
-        typology,
-        reported_amount: Number(amount).toFixed(2),
-        currency: "INR",
-        victim_jurisdiction_id: jurisdiction,
-        narrative: narrative.trim() || null,
-        reported_beneficiary_account: account.trim() || null,
-        reported_beneficiary_ifsc: ifsc.trim().toUpperCase() || null,
+      const run = await runInvestigation({
+        complaint: {
+          caseRef: caseRef || `NCRP/2026/${Math.floor(100000 + Math.random() * 899999)}`,
+          typology,
+          amount: Number(amount).toFixed(2),
+          fraudStartedAt: fraudStarted,
+          reportedAt,
+          narrative: narrative.trim() || null,
+          beneficiaryAccount: account.trim() || null,
+          beneficiaryIfsc: ifsc.trim().toUpperCase() || null,
+        },
+        onStage: (key, state) => setStages((s) => ({ ...s, [key]: state })),
       });
-      setCreated(complaint);
+      if (run.complaint) setCreated(run.complaint);
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -193,9 +238,9 @@ export default function NewComplaintPage() {
               <li className="flex gap-2.5">
                 <span className="text-ink-300 tabular-nums">3</span>
                 <span>
-                  Ranked cash-out candidates and an alert follow only when there is a
-                  trail to reconstruct. There is no trained model yet, so this step does
-                  not run on live complaints.
+                  Cash-out candidates were ranked against the real endpoint registry and
+                  the case went through the alert policy. The ranking is a relative model
+                  score, not a calibrated probability — there is no trained Tier 2 ranker.
                 </span>
               </li>
             </ol>
@@ -204,10 +249,17 @@ export default function NewComplaintPage() {
           <div className="mt-4 flex gap-2">
             <button
               type="button"
-              onClick={() => router.push("/cases")}
+              onClick={() => router.push("/transaction-trail")}
               className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-paper transition-opacity hover:opacity-90"
             >
-              Go to cases <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+              Follow the money <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/demo")}
+              className="rounded-md border border-line bg-raised px-3 py-2 text-[13px] text-ink-700 transition-colors hover:text-ink-900"
+            >
+              See the full pipeline
             </button>
             <button
               type="button"
@@ -235,6 +287,20 @@ export default function NewComplaintPage() {
       <PageHeader
         title="New complaint"
         subtitle="Record a reported cybercrime. Goes straight to the complaints API."
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={autofill}
+              disabled={submitting}
+              className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[12px] font-medium text-accent transition-opacity hover:opacity-80 disabled:opacity-50"
+            >
+              <Wand2 className="h-3.5 w-3.5" aria-hidden />
+              Autofill synthetic data
+            </button>
+            <PresentationControls />
+          </>
+        }
       />
 
       <div className="mx-auto max-w-3xl px-6 py-6">
@@ -386,16 +452,51 @@ export default function NewComplaintPage() {
             </p>
           </Card>
 
-          <div className="flex items-center gap-3">
+          {/* The pipeline, in place while it runs. Each line is a stage of
+              `runInvestigation` — the same one the walkthrough uses — so this is
+              reporting real progress rather than animating a wait. */}
+          {submitting && (
+            <Card title="Processing">
+              <ol className="space-y-2">
+                {STAGES.map((stage, i) => {
+                  const state = stages[stage.key] ?? "pending";
+                  return (
+                    <li key={stage.key} className="flex items-center gap-2.5 text-[12px]">
+                      <span className="shrink-0" aria-hidden>
+                        {state === "done" ? (
+                          <Check className="h-3.5 w-3.5 text-evidence-strong" />
+                        ) : state === "running" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+                        ) : (
+                          <span className="block h-3.5 w-3.5 rounded-full border border-line" />
+                        )}
+                      </span>
+                      <span className={state === "pending" ? "text-ink-500" : "text-ink-900"}>
+                        {i + 1}. {stage.label}
+                      </span>
+                      {state === "done" && (
+                        <span className="ml-auto text-[11px] text-evidence-strong">
+                          {stage.done}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </Card>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="submit"
-              disabled={submitting || !jurisdiction}
+              disabled={submitting}
               className="rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-paper transition-opacity hover:opacity-90 disabled:opacity-40"
             >
-              {submitting ? "Recording…" : "Record complaint"}
+              {submitting ? "Processing…" : "Register complaint"}
             </button>
             <span className="text-[11px] text-ink-500">
-              Filed into your own jurisdiction.
+              Filed into your own jurisdiction, then run through the investigation
+              pipeline.
             </span>
           </div>
         </form>

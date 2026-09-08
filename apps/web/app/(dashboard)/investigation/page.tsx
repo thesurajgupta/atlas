@@ -133,6 +133,54 @@ export default function InvestigationDashboard() {
       }
     : CASE_DETAILS_DATA;
 
+  /**
+   * The case's own timeline, or the fixture's.
+   *
+   * Built from the hops the trail actually walked, so an amount on this strip
+   * is an amount that appears on the transaction trail. The fixture carried a
+   * ₹75,000 transfer that belonged to no case in the system — the kind of stray
+   * number that makes two screens disagree in front of a judge.
+   */
+  const caseTimeline = caseView
+    ? [
+        {
+          id: 'T0',
+          title: 'Complaint received',
+          amount: formatRupees(caseView.reportedAmount),
+          date: caseView.observedAt
+            ? new Date(caseView.observedAt).toLocaleString('en-IN', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })
+            : '—',
+          detail: `${caseView.caseRef} · ${caseView.typology.replace(/_/g, ' ').toLowerCase()}`,
+        },
+        ...caseView.hops.slice(0, 3).map((h) => ({
+          id: h.id,
+          title: `Hop ${h.index} · ${h.rail}`,
+          amount: formatRupees(h.amount),
+          date: new Date(h.occurredAt).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          }),
+          detail: `${h.fromLabel} → ${h.toLabel}`,
+        })),
+        {
+          id: 'TA',
+          title: caseView.alertRaised ? 'Alert raised' : 'Alert refused',
+          amount: undefined,
+          date: '—',
+          detail: caseView.alertSeverity ?? 'policy declined to raise',
+        },
+      ]
+    : [
+        { id: 'T1', title: 'Cloned Account Created', amount: undefined, date: '05 Sep 2025', detail: 'Fake account initialized via TOR Proxy' },
+        { id: 'T2', title: 'Funds Transfer', amount: undefined, date: '05 Sep 2025', detail: 'Transferred to a mule account' },
+        { id: 'T3', title: 'ATM Withdrawal Attempt', amount: undefined, date: '05 Sep 2025', detail: 'CCTV triggered' },
+        { id: 'T4', title: 'Device Forensics', amount: undefined, date: '06 Sep 2025', detail: 'IMEI matched to primary suspect' },
+        { id: 'T5', title: 'Evidence Acquisition', amount: undefined, date: '07 Sep 2025', detail: 'Statements and logs secured' },
+      ];
+
   // State Management
   const [activeTab, setActiveTab] = useState<'caseDetails' | 'suspects' | 'evidence'>('suspects');
   const [selectedSuspect, setSelectedSuspect] = useState(SUSPECTS_DATA[0]!);  // module-level literal, never empty
@@ -515,13 +563,7 @@ export default function InvestigationDashboard() {
                 <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-raised -translate-y-1/2"></div>
                 
                 <div className="relative grid grid-cols-5 gap-4">
-                  {[
-                    { id: 'T1', title: 'Cloned Account Created', date: '05 Sep 2025', detail: 'Fake account initialized via TOR Proxy' },
-                    { id: 'T2', title: 'Funds Transfer', amount: '₹75,000', date: '05 Sep 2025', detail: 'Transferred to Mule Bank B account' },
-                    { id: 'T3', title: 'ATM Withdrawal Attempt', date: '05 Sep 2025', detail: 'ATM-8831 CCTV triggered' },
-                    { id: 'T4', title: 'Device Forensics', date: '06 Sep 2025', detail: 'IMEI matched to primary suspect' },
-                    { id: 'T5', title: 'Evidence Acquisition', date: '07 Sep 2025', detail: 'Statements and logs secured' }
-                  ].map((event) => (
+                  {caseTimeline.map((event) => (
                     <div 
                       key={event.id}
                       onClick={() => setSelectedTimelineEvent(selectedTimelineEvent === event.id ? null : event.id)}

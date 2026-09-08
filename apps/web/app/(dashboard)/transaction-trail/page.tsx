@@ -164,11 +164,18 @@ const TRAIL_DATASETS = [
 /**
  * The active case, in the shape this page already renders.
  *
- * The flowchart below is unchanged — only where its data comes from. Four
- * fields the fixture carried are **not in the graph**: bank, account holder, IP
- * and location. They are rendered as "—" rather than filled with something
- * plausible, because an invented account holder is exactly what makes a demo
- * look real and be false. When bank feeds land (#65) they populate here.
+ * The flowchart is unchanged — only where its data comes from. Bank, account
+ * number, holder and rail now come from `lib/synthetic-bank`, which generates
+ * them deterministically from the entity id: the same account reads the same
+ * here, on the network graph and in the report, across reloads.
+ *
+ * Those institutions are **fictional** — "Meridian Bank", not any real one —
+ * because this repository is public and a real bank rendered under "Primary
+ * Mule Account" is a defamation problem before it is a data one.
+ *
+ * IP and geolocation stay "—". Those are not derivable from anything ATLAS
+ * holds, and inventing them would be inventing evidence rather than shaping a
+ * plausible identifier.
  */
 function trailFromCase(view: NonNullable<ReturnType<typeof useCaseView>>) {
   const byId = new Map(view.nodes.map((n) => [n.id, n]));
@@ -182,16 +189,21 @@ function trailFromCase(view: NonNullable<ReturnType<typeof useCaseView>>) {
           : "Mule Account",
     type:
       n.role === "VICTIM" ? "Source" : n.role === "TERMINAL" ? "Sink" : "Intermediary",
-    bank: "—",
-    accNo: n.label,
-    holder: "—",
-    amount: formatRupees(n.received),
+    bank: n.account.institution,
+    accNo: `${n.account.accountNumber} · ${n.account.ifsc}`,
+    holder: n.account.holder ?? "Not recorded — victim identity is not collected",
+    // The victim receives nothing — they only pay out — so "₹0" here would be
+    // read as a balance rather than as "this column does not apply".
+    amount: n.received > 0 ? formatRupees(n.received) : '—',
     time: n.firstSeen
       ? new Date(n.firstSeen).toLocaleString("en-IN", {
           dateStyle: "medium",
           timeStyle: "short",
         })
       : "—",
+    // Not derivable from anything ATLAS holds. Left absent rather than
+    // fabricated: a plausible IP address in an investigation console reads as
+    // evidence.
     ip: "—",
     // Depth is the only risk signal the graph supports on its own: the further
     // from the victim, the closer to a cash-out. Not a model score.

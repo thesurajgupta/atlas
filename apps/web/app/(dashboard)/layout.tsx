@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/nav/Sidebar";
+import { PresentationRunner } from "@/components/demo/PresentationMode";
 
 /**
  * The console shell: a fixed sidebar and one scrolling region beside it.
@@ -16,7 +17,12 @@ export default function DashboardLayout({
   return (
     <div className="flex h-dvh overflow-hidden bg-paper">
       <Sidebar />
-      <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mounted once, so every page participates in the tour without each
+            one wiring up a timer. Renders nothing when it is not running. */}
+        <PresentationRunner />
+        <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+      </div>
     </div>
   );
 }

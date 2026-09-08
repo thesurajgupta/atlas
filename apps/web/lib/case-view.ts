@@ -2,6 +2,12 @@
 
 import { useMemo } from "react";
 import { useDemoRun, type DemoRun, type RankedCandidate } from "@/lib/demo-run";
+import {
+  syntheticAccount,
+  syntheticTransactionRef,
+  type Rail,
+  type SyntheticAccount,
+} from "@/lib/synthetic-bank";
 
 /**
  * One case, projected into the shapes each page needs.
@@ -35,6 +41,8 @@ export interface CaseTrailNode {
   /** Total received at this node, in rupees. Summed from the hops that reach it. */
   received: number;
   firstSeen: string | null;
+  /** Fictional banking identity, deterministic from the entity id. */
+  account: SyntheticAccount;
 }
 
 export interface CaseTrailHop {
@@ -47,6 +55,9 @@ export interface CaseTrailHop {
   amount: number;
   occurredAt: string;
   depth: number;
+  /** Rail-shaped reference, stable for this hop. */
+  reference: string;
+  rail: Rail;
 }
 
 export interface CaseView {
@@ -134,20 +145,31 @@ function project(run: DemoRun): CaseView | null {
         depth: d,
         received: received.get(id) ?? 0,
         firstSeen: firstSeen.get(id) ?? null,
+        // The victim carries no holder name: ATLAS does not collect victim
+        // identity, so showing one would be a field the product does not have.
+        account: syntheticAccount(id, { isVictim: role === "VICTIM" }),
       };
     });
 
-  const hops: CaseTrailHop[] = rawHops.map((h, i) => ({
-    id: h.edge_id,
-    index: i + 1,
-    from: h.from_entity_id,
-    to: h.to_entity_id,
-    fromLabel: labels.get(h.from_entity_id) ?? h.from_entity_id.slice(0, 8),
-    toLabel: labels.get(h.to_entity_id) ?? h.to_entity_id.slice(0, 8),
-    amount: Number(h.amount),
-    occurredAt: h.occurred_at,
-    depth: h.depth,
-  }));
+  const accounts = new Map(nodes.map((n) => [n.id, n.account]));
+
+  const hops: CaseTrailHop[] = rawHops.map((h, i) => {
+    // The rail is the *sending* account's, because that is who chose it.
+    const rail = accounts.get(h.from_entity_id)?.rail ?? "IMPS";
+    return {
+      id: h.edge_id,
+      index: i + 1,
+      from: h.from_entity_id,
+      to: h.to_entity_id,
+      fromLabel: labels.get(h.from_entity_id) ?? h.from_entity_id.slice(0, 8),
+      toLabel: labels.get(h.to_entity_id) ?? h.to_entity_id.slice(0, 8),
+      amount: Number(h.amount),
+      occurredAt: h.occurred_at,
+      depth: h.depth,
+      reference: syntheticTransactionRef(h.edge_id, rail),
+      rail,
+    };
+  });
 
   return {
     caseRef: run.case_ref,
