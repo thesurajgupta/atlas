@@ -20,14 +20,6 @@ export type Channel =
   | "CRYPTO_P2P";
 
 export type Typology =
-  // `ONLINE_FINANCIAL_FRAUD` and `OTHER` are NCRP's own top-level categories.
-  // They are here because a complaint filed under one of them must reach the
-  // fact-strip labelled the way the citizen filed it: mapping "online financial
-  // fraud" onto the nearest *specific* typology would put a claim on screen the
-  // complaint does not support. `OTHER` also matches `FRAUD_TYPOLOGIES` in
-  // `lib/api.ts`, which the API has always accepted.
-  | "ONLINE_FINANCIAL_FRAUD"
-  | "OTHER"
   | "DIGITAL_ARREST"
   | "INVESTMENT_SCAM"
   | "UPI_COLLECT_FRAUD"

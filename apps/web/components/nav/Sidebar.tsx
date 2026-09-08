@@ -6,24 +6,24 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   Briefcase,
-  ExternalLink,
   FileBarChart,
   FilePlus,
   LayoutDashboard,
   Landmark,
   MapPin,
+  PlayCircle,
   Radio,
   ScrollText,
   Search,
   Settings,
+  GitFork,
   Share2,
   SlidersHorizontal,
   Users,
-  Workflow,
+  ExternalLink,
 } from "lucide-react";
 
 import { ResetDemoButton } from "@/components/demo/ResetDemoButton";
-import { SourceDataLauncher } from "@/components/demo/SourceDataPanel";
 
 /**
  * Primary navigation (spec §25.2).
@@ -44,11 +44,12 @@ import { SourceDataLauncher } from "@/components/demo/SourceDataPanel";
  */
 const CASEWORK = [
   { label: "Dashboard", href: "/overview", icon: LayoutDashboard },
+  { label: "Demo investigation", href: "/demo", icon: PlayCircle },
   { label: "New complaint", href: "/new-complaint", icon: FilePlus },
   { label: "Cases", href: "/cases", icon: Briefcase },
   { label: "Investigation", href: "/investigation", icon: Search },
-  { label: "Analysis pipeline", href: "/pipeline", icon: Workflow },
-  { label: "Transaction trail", href: "/money-trail", icon: ArrowRightLeft },
+  { label: "Transaction trail", href: "/transaction-trail", icon: ArrowRightLeft },
+  { label: "Money trail canvas", href: "/money-trail", icon: GitFork },
   { label: "Network graph", href: "/network-graph", icon: Share2 },
   { label: "ATM / branch map", href: "/map", icon: MapPin },
   { label: "Predicted locations", href: "/predicted-locations", icon: Radio },
@@ -128,13 +129,11 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* Demo controls.
-          Separated from the navigation above by a rule and a caption, because
-          none of it is part of the product: one link out to the citizen-facing
-          portal that feeds this console, one panel showing the data behind
-          whatever is on screen, and one way to clear the demo and run it again.
-          A presentation that can only be given once is one that gets debugged
-          in front of judges. */}
+      {/* The citizen-facing half of the demonstration, and the way back to a
+          clean slate.
+          Separated from the navigation above by a rule, because neither is part
+          of the console: `/ncrp` is a different product that feeds this one, and
+          the reset exists so a walkthrough can be given more than once. */}
       <div className="space-y-1 border-t border-line px-2.5 py-2.5">
         <p className="px-0.5 pb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-ink-300">
           Demo
@@ -146,7 +145,6 @@ export function Sidebar() {
           <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
           Reporting portal
         </Link>
-        <SourceDataLauncher />
         <ResetDemoButton
           className="rounded-md border border-line px-2.5 py-1.5 text-[11.5px] text-ink-500 transition-colors hover:border-severity-high/40 hover:text-severity-high"
           redirectTo="/ncrp"

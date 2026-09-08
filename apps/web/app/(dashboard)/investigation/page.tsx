@@ -1,402 +1,668 @@
-"use client";
 
-import { Suspense, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import {
-  ArrowRightLeft,
-  Building2,
-  ExternalLink,
-  Share2,
-  ShieldAlert,
-  Users,
-} from "lucide-react";
-import { MOCK_CASES } from "@/lib/mock-data";
-import { SYNTHETIC_TRAIL_PATHS } from "@/lib/graph/synthetic-trail";
-import type { Case } from "@/lib/types";
-import { rupees as inr } from "@/lib/demo/defaults";
-import { useDemoCase } from "@/lib/demo/store";
-import { CaseBanner } from "@/components/demo/CaseBanner";
-import { PageHeader } from "@/components/nav/PageHeader";
-import { Card, MockNotice } from "@/components/ui/Card";
-import { EvidenceBadge } from "@/components/prediction/EvidenceBadge";
-import { PredictionAndWhy } from "@/components/prediction/PredictionAndWhy";
+'use client';
+import React, { useState } from 'react';
+import { CaseContextBar } from '@/components/demo/CaseContextBar';
+import { PipelineRail } from '@/components/demo/PipelineRail';
+import { useCaseView, formatRupees } from '@/lib/case-view';
+import { 
+  Search, Bell, FileText, Upload, 
+  ArrowLeft, ArrowRight, Send, X, FileUp, Calendar
+} from 'lucide-react';
 
-/**
- * The investigator's workspace (spec §26).
- *
- * One case, everything about it on one screen, in the order the work happens:
- * what is at stake, where the money went, who is involved, what is predicted,
- * what can be done. The whole point is that the investigator does not navigate
- * between five pages to hold one case in their head — the deep links out are for
- * going *deeper* into a view, not for assembling the picture.
- *
- * The action panel deliberately shows what each intervention *costs in time*.
- * An action list without that is a menu; with it, it is a decision, and the
- * golden hour is the only budget that matters here.
- */
-
-const ACTIONS = [
+// --- MOCK DATA ---
+const SUSPECTS_DATA = [
   {
-    label: "Request fund block",
-    detail: "Bank freezes the beneficiary account pending verification",
-    eta: "8–20 min",
-    tone: "primary" as const,
+    id: 'S-01',
+    name: 'Rohit Sharma',
+    riskScore: 92,
+    status: 'Under Investigation',
+    dob: '12 Mar 1992',
+    gender: 'Male',
+    mobile: '+91 98765 43210',
+    email: 'rohit.sharma2@gmail.com',
+    address: 'Nagoi Nagar, India',
+    kyc: 'Verified',
+    timeline: [
+      { event: 'Unusual Transfer Flagged', time: '05 Sep 2025, 08:24 AM', status: 'high' },
+      { event: 'Device Binding Change', time: '05 Sep 2025, 01:24 PM', status: 'medium' }
+    ]
   },
   {
-    label: "Alert ATM operator",
-    detail: "Operator watches the ranked endpoints for the predicted window",
-    eta: "5–15 min",
-    tone: "normal" as const,
+    id: 'S-02',
+    name: 'Amit Verma',
+    riskScore: 45,
+    status: 'Person of Interest',
+    dob: '18 Aug 1988',
+    gender: 'Male',
+    mobile: '+91 91234 56789',
+    email: 'amit.verma88@gmail.com',
+    address: 'Rohini Sector 7, Delhi',
+    kyc: 'Pending',
+    timeline: [
+      { event: 'Account Linked to IP', time: '04 Sep 2025, 11:10 PM', status: 'low' }
+    ]
   },
   {
-    label: "Hand off to jurisdiction",
-    detail: "Ranked endpoints sit outside this district",
-    eta: "30–90 min",
-    tone: "normal" as const,
-  },
+    id: 'S-03',
+    name: 'Priya Nair',
+    riskScore: 18,
+    status: 'Victim',
+    dob: '04 Jun 1995',
+    gender: 'Female',
+    mobile: '+91 99887 76655',
+    email: 'pnair_95@outlook.com',
+    address: 'Indiranagar, Bengaluru',
+    kyc: 'Verified',
+    timeline: [
+      { event: 'Report Submitted', time: '05 Sep 2025, 07:15 AM', status: 'info' }
+    ]
+  }
 ];
 
-function rupees(n: number): string {
-  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-}
+const EVIDENCE_ITEMS = [
+  {
+    id: 'E-101',
+    title: 'Forensic Image: Android Device (DV-443322)',
+    category: 'Digital Forensic',
+    meta: 'Metadata: Android OS v13',
+    accessed: '05 Sep 2025, 10:24 AM',
+    analysed: '17 Sep 2025, 11:28 AM',
+    analysesCount: 166
+  },
+  {
+    id: 'E-102',
+    title: 'CCTV Footages (ATM-8831)',
+    category: 'Video Recording',
+    meta: 'Metadata: 1080p 30fps MP4',
+    accessed: '05 Sep 2025, 10:24 AM',
+    analysed: '17 Sep 2025, 11:38 AM',
+    analysesCount: 0
+  },
+  {
+    id: 'E-103',
+    title: 'SMS Logs & Gateway Records',
+    category: 'Telecom Records',
+    meta: 'Metadata: Carrier Dump',
+    accessed: '05 Sep 2025, 10:24 AM',
+    analysed: '17 Sep 2025, 11:38 PM',
+    analysesCount: 12
+  },
+  {
+    id: 'E-104',
+    title: 'Witness Written Statements',
+    category: 'Documentation',
+    meta: 'Metadata: Signed Affidavit',
+    accessed: '05 Sep 2025, 10:24 PM',
+    analysed: 'Pending',
+    analysesCount: 0
+  }
+];
 
-function CaseSummary({ item }: { item: Case }) {
-  const s = item.fact_strip;
-  const inGoldenHour = s.golden_hour_position_minutes <= 60;
-  return (
-    <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
-      {[
-        { label: "Typology", value: s.typology.replace(/_/g, " ").toLowerCase() },
-        { label: "Amount at risk", value: rupees(s.amount_at_risk_inr) },
-        {
-          label: "Golden hour",
-          value: `${s.golden_hour_position_minutes} min elapsed`,
-          tone: inGoldenHour ? "text-severity-high" : "text-ink-500",
-        },
-        { label: "Status", value: item.status.replace(/_/g, " ").toLowerCase() },
-      ].map((f) => (
-        <div key={f.label}>
-          <p className="text-[10px] uppercase tracking-wider text-ink-500">{f.label}</p>
-          <p className={`mt-1 text-[13px] tabular-nums ${f.tone ?? "text-ink-900"}`}>
-            {f.value}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
+const CASE_DETAILS_DATA = {
+  caseId: 'C-4501',
+  title: 'Phishing Fraud Operation - Rohit Sharma',
+  severity: 'Critical',
+  assignedTo: 'Inspector [Delhi Cyber Cell]',
+  dateOpened: '05 Sep 2025',
+  totalLoss: '₹7,50,000',
+  description: 'Multi-phishing operation targeting national banking customers via fake spoofed web portals. Funds diverted via mule accounts across multiple states.'
+};
 
-/**
- * `useSearchParams` forces the surrounding tree out of static prerendering, so
- * it lives behind a boundary rather than at the top of the route. Without this,
- * `next build` fails the whole page rather than deferring the part that reads
- * the query string.
- */
-export default function InvestigationRoute() {
-  return (
-    <Suspense
-      fallback={<p className="px-6 py-16 text-center text-[13px] text-ink-500">Loading case…</p>}
-    >
-      <InvestigationPage />
-    </Suspense>
-  );
-}
+export default function InvestigationDashboard() {
+  const caseView = useCaseView();
 
-function InvestigationPage() {
-  const { activeCase } = useDemoCase();
-  const requestedCase = useSearchParams().get("case");
-
-  const cases: Case[] =
-    activeCase === null ? MOCK_CASES : [activeCase.atlas_case, ...MOCK_CASES];
-
-  // `null` follows the referred case. A seeded id would pin whatever was first
-  // before the store hydrated, which is exactly the case an operator did not
-  // ask for.
-  const [pinnedId, setPinnedId] = useState<string | null>(null);
-  const caseId = pinnedId ?? requestedCase ?? cases[0]?.case_id ?? "";
-  const item = cases.find((c) => c.case_id === caseId) ?? cases[0];
-
-  const isLive = item !== undefined && item.case_id === activeCase?.case_id;
+  // The active case's own header, or the fixture's. `totalLoss` is what the
+  // complaint reported; the trail's own total is shown separately on the
+  // transaction pages, and conflating the two is how a case ends up with two
+  // different amounts on two screens.
+  const caseDetails = caseView
+    ? {
+        caseId: caseView.caseRef,
+        title: `${caseView.typology.replace(/_/g, ' ').toLowerCase()} — reconstructed`,
+        severity: caseView.alertSeverity ?? 'Under review',
+        assignedTo: 'Inspector [Delhi Cyber Cell]',
+        dateOpened: new Date(caseView.startedAt).toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }),
+        totalLoss: formatRupees(caseView.reportedAmount),
+        description:
+          caseView.signals.join(' · ') ||
+          'No behavioural signal was read from the reconstructed trail.',
+      }
+    : CASE_DETAILS_DATA;
 
   /**
-   * The same trail `/money-trail` draws and `/network-graph` folds.
+   * The case's own timeline, or the fixture's.
    *
-   * **De-duplicated on `edge_id`.** Paths overlap — three of them routinely
-   * share a leading hop — so a flat `flatMap` counts that hop three times and
-   * this card reports more hops than the pipeline, the canvas and the network
-   * graph do. Which is the exact "two screens, two numbers" failure the whole
-   * shared case exists to prevent.
+   * Built from the hops the trail actually walked, so an amount on this strip
+   * is an amount that appears on the transaction trail. The fixture carried a
+   * ₹75,000 transfer that belonged to no case in the system — the kind of stray
+   * number that makes two screens disagree in front of a judge.
    */
-  const paths = isLive && activeCase !== null ? activeCase.trail_paths : SYNTHETIC_TRAIL_PATHS;
-  const hops = [...new Map(paths.flatMap((p) => p.hops).map((h) => [h.edge_id, h])).values()];
-  // Accounts, not entities: a cash-out endpoint is where the money left, not an
-  // account on the path. The live case counts them the same way (`account_count`).
-  const accountCount =
-    isLive && activeCase !== null
-      ? activeCase.features.account_count
-      : new Set(
-          hops
-            .filter((h) => h.edge_type === "TRANSFERRED_TO")
-            .flatMap((h) => [h.from_entity_id, h.to_entity_id]),
-        ).size;
+  const caseTimeline = caseView
+    ? [
+        {
+          id: 'T0',
+          title: 'Complaint received',
+          amount: formatRupees(caseView.reportedAmount),
+          date: caseView.observedAt
+            ? new Date(caseView.observedAt).toLocaleString('en-IN', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })
+            : '—',
+          detail: `${caseView.caseRef} · ${caseView.typology.replace(/_/g, ' ').toLowerCase()}`,
+        },
+        ...caseView.hops.slice(0, 3).map((h) => ({
+          id: h.id,
+          title: `Hop ${h.index} · ${h.rail}`,
+          amount: formatRupees(h.amount),
+          date: new Date(h.occurredAt).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          }),
+          detail: `${h.fromLabel} → ${h.toLabel}`,
+        })),
+        {
+          id: 'TA',
+          title: caseView.alertRaised ? 'Alert raised' : 'Alert refused',
+          amount: undefined,
+          date: '—',
+          detail: caseView.alertSeverity ?? 'policy declined to raise',
+        },
+      ]
+    : [
+        { id: 'T1', title: 'Cloned Account Created', amount: undefined, date: '05 Sep 2025', detail: 'Fake account initialized via TOR Proxy' },
+        { id: 'T2', title: 'Funds Transfer', amount: undefined, date: '05 Sep 2025', detail: 'Transferred to a mule account' },
+        { id: 'T3', title: 'ATM Withdrawal Attempt', amount: undefined, date: '05 Sep 2025', detail: 'CCTV triggered' },
+        { id: 'T4', title: 'Device Forensics', amount: undefined, date: '06 Sep 2025', detail: 'IMEI matched to primary suspect' },
+        { id: 'T5', title: 'Evidence Acquisition', amount: undefined, date: '07 Sep 2025', detail: 'Statements and logs secured' },
+      ];
 
-  if (!item) return null;
+  // State Management
+  const [activeTab, setActiveTab] = useState<'caseDetails' | 'suspects' | 'evidence'>('suspects');
+  const [selectedSuspect, setSelectedSuspect] = useState(SUSPECTS_DATA[0]!);  // module-level literal, never empty
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 2;
+
+  // Toggle Panel & Modal States
+  const [isCaseNotesOpen, setIsCaseNotesOpen] = useState(true);
+  const [isTimelineOpen, setIsTimelineOpen] = useState(true);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+
+  // Dynamic Case Notes State
+  const [notes, setNotes] = useState([
+    { id: 1, author: 'Inspector [Delhi Cyber Cell]', text: 'Threaded, secured, and automatically timestamped entry.', time: '05 Sep 2025, 08:22 AM' },
+    { id: 2, author: 'Inspector [Delhi Cyber Cell]', text: 'Primary suspect identified via IMEI cross-match.', time: '05 Sep 2025, 11:45 AM' }
+  ]);
+  const [newNote, setNewNote] = useState('');
+
+  // Timeline events state
+  const [selectedTimelineEvent, setSelectedTimelineEvent] = useState<string | null>(null);
+
+  // Dynamic Evidence State
+  const [evidenceList, setEvidenceList] = useState(EVIDENCE_ITEMS);
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadCategory, setUploadCategory] = useState('Digital Forensic');
+
+  // Handle Note Submit
+  const handleAddNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNote.trim()) return;
+    setNotes([
+      ...notes,
+      {
+        id: Date.now(),
+        author: 'Inspector [Delhi Cyber Cell]',
+        text: newNote,
+        time: new Date().toLocaleString()
+      }
+    ]);
+    setNewNote('');
+  };
+
+  // Handle Evidence Upload Submit
+  const handleUploadEvidence = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadTitle.trim()) return;
+    const newItem = {
+      id: `E-${100 + evidenceList.length + 1}`,
+      title: uploadTitle,
+      category: uploadCategory,
+      meta: 'Metadata: User Attached File',
+      accessed: 'Just now',
+      analysed: 'Pending',
+      analysesCount: 0
+    };
+    setEvidenceList([newItem, ...evidenceList]);
+    setUploadTitle('');
+    setIsUploadModalOpen(false);
+  };
+
+  // Pagination Helper
+  const totalPages = Math.ceil(SUSPECTS_DATA.length / itemsPerPage);
+  const paginatedSuspects = SUSPECTS_DATA.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
-    <>
-      <PageHeader
-        title="Investigation"
-        subtitle={`${item.case_id} · one case, everything about it`}
-        actions={
-          <select
-            aria-label="Case"
-            value={caseId}
-            onChange={(e) => setPinnedId(e.target.value)}
-            className="rounded-md border border-line bg-raised px-2.5 py-1.5 text-[12px] text-ink-900 focus:border-accent focus:outline-none"
-          >
-            {cases.map((c) => (
-              <option key={c.case_id} value={c.case_id}>
-                {c.case_id === activeCase?.case_id ? "● " : ""}
-                {c.case_id} — {c.fact_strip.typology.replace(/_/g, " ").toLowerCase()}
-              </option>
-            ))}
-          </select>
-        }
-      />
+    <div className="flex h-full bg-paper text-ink-700 overflow-hidden">
 
-      <div className="px-6 py-5">
-        <CaseBanner page="The investigation workspace" />
-
-        <div className="mb-4">
-          <MockNotice>
-            {isLive && activeCase !== null ? (
-              <>
-                Everything below is derived from complaint {activeCase.complaint.complaint_id} —
-                the trail, the account count and the prediction are the same objects{" "}
-                <span className="not-italic">Transaction trail</span>,{" "}
-                <span className="not-italic">Network graph</span> and{" "}
-                <span className="not-italic">Predicted locations</span> render. The ranking is a
-                stated heuristic, not a trained model.
-              </>
-            ) : (
-              <>
-                Mock case data for interface development. The trail, network and prediction below
-                are the same fixture, so the story stays consistent across pages.
-              </>
-            )}
-          </MockNotice>
-        </div>
-
-        {isLive && activeCase !== null && (
-          <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Complaint", activeCase.complaint.complaint_id],
-              ["Victim account", activeCase.complaint.victim_account],
-              ["Transaction ID", activeCase.complaint.transaction_id],
-              ["Reported amount", inr(activeCase.complaint.fraud_amount_inr)],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-line bg-surface px-3.5 py-2.5">
-                <p className="text-[10px] uppercase tracking-wider text-ink-500">{label}</p>
-                <p className="mt-1 truncate font-mono text-[13px] font-medium text-ink-900">
-                  {value}
-                </p>
-              </div>
-            ))}
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Bar */}
+        <header className="h-16 bg-surface border-b border-line flex items-center justify-between px-6 shrink-0">
+          <div className="relative w-96">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-500" />
+            <input 
+              type="text" 
+              placeholder="Search cases, accounts, locations, or transaction IDs..."
+              className="w-full bg-paper border border-line-strong rounded-lg pl-9 pr-8 py-1.5 text-xs text-ink-700 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            />
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] bg-raised text-ink-500 px-1.5 py-0.5 rounded border border-line-strong">
+              ⌘K
+            </span>
           </div>
-        )}
 
-        <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
-          <div className="min-w-0 space-y-4">
-            <Card
-              title="Case"
-              action={<EvidenceBadge band={item.fact_strip.evidence_sufficiency} />}
-            >
-              <CaseSummary item={item} />
-            </Card>
+          <div className="flex items-center space-x-4">
+            <button className="relative p-2 text-ink-500 hover:text-ink-900 rounded-lg hover:bg-raised">
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
+            </button>
+            <div className="flex items-center space-x-3 pl-4 border-l border-line">
+              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center font-bold text-sm text-ink-700">
+                I
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-ink-700">Inspector</p>
+                <p className="text-[10px] text-ink-500">Delhi Cyber Cell</p>
+              </div>
+            </div>
+          </div>
+        </header>
+        <CaseContextBar stage="Investigation" />
+        <PipelineRail current="Risk" />
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Card
-                title="Money trail"
-                action={
-                  <Link
-                    href="/money-trail"
-                    className="inline-flex items-center gap-1 text-[11px] text-accent transition-opacity hover:opacity-80"
-                  >
-                    Open <ExternalLink className="h-3 w-3" aria-hidden />
-                  </Link>
-                }
-              >
-                <div className="flex items-center gap-3">
-                  <ArrowRightLeft className="h-5 w-5 shrink-0 text-ink-300" aria-hidden />
-                  <p className="text-[13px] text-ink-700">
-                    <span className="text-lg font-semibold tabular-nums text-ink-900">
-                      {hops.length}
-                    </span>{" "}
-                    hops reconstructed, time-respecting, bounded at the as-of instant.
-                  </p>
-                </div>
-              </Card>
+        <p className="mx-6 mt-4 rounded-md border border-line bg-surface px-3 py-2 text-[11px] italic text-ink-500">
+          Mock case data for interface development. Synthetic identifiers only.
+        </p>
 
-              <Card
-                title="Accounts involved"
-                action={
-                  <Link
-                    href="/network-graph"
-                    className="inline-flex items-center gap-1 text-[11px] text-accent transition-opacity hover:opacity-80"
-                  >
-                    Network <ExternalLink className="h-3 w-3" aria-hidden />
-                  </Link>
-                }
-              >
-                <div className="flex items-center gap-3">
-                  <Users className="h-5 w-5 shrink-0 text-ink-300" aria-hidden />
-                  <p className="text-[13px] text-ink-700">
-                    <span className="text-lg font-semibold tabular-nums text-ink-900">
-                      {accountCount}
-                    </span>{" "}
-                    accounts on the reconstructed path.
-                  </p>
-                </div>
-              </Card>
+        {/* Scrollable Content Workspace */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Header Action Bar */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-ink-900">
+                Investigation: {caseDetails.title}
+              </h2>
+              <div className="flex items-center space-x-3 mt-1 text-xs text-ink-500">
+                <span className="bg-raised text-ink-700 px-2 py-0.5 rounded border border-line-strong">
+                  Case ID: {caseDetails.caseId}
+                </span>
+                <span className="text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded font-medium">
+                  {caseDetails.severity} Severity
+                </span>
+              </div>
             </div>
 
-            <Card
-              title="Prediction"
-              action={
-                <Link
-                  href="/predicted-locations"
-                  className="inline-flex items-center gap-1 text-[11px] text-accent transition-opacity hover:opacity-80"
-                >
-                  Ranked list <ExternalLink className="h-3 w-3" aria-hidden />
-                </Link>
-              }
-            >
-              <PredictionAndWhy prediction={item.prediction} />
-            </Card>
+            <div className="flex items-center space-x-3">
+              <button 
+                onClick={() => setIsUploadModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-ink-900 px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-lg shadow-blue-600/20 transition-all"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Upload Evidence</span>
+              </button>
+              <button 
+                onClick={() => setIsCaseNotesOpen(!isCaseNotesOpen)}
+                className={`px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                  isCaseNotesOpen 
+                    ? 'bg-raised border-slate-600 text-ink-900' 
+                    : 'bg-transparent border-line-strong text-ink-500 hover:text-ink-900'
+                }`}
+              >
+                {isCaseNotesOpen ? 'Hide Notes' : 'Show Notes'}
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-4">
-            <Card title="Available action">
-              <ul className="space-y-2.5">
-                {ACTIONS.map((a) => (
-                  <li key={a.label}>
-                    <button
-                      type="button"
-                      className={`w-full rounded-md border px-3 py-2.5 text-left transition-colors ${
-                        a.tone === "primary"
-                          ? "border-accent/40 bg-accent/10 hover:bg-accent/15"
-                          : "border-line bg-raised hover:border-line-strong"
-                      }`}
-                    >
-                      <span className="flex items-center justify-between gap-2">
-                        <span
-                          className={`text-[13px] font-medium ${
-                            a.tone === "primary" ? "text-accent" : "text-ink-900"
-                          }`}
-                        >
-                          {a.label}
-                        </span>
-                        <span className="shrink-0 text-[10px] tabular-nums text-ink-500">
-                          {a.eta}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-500">
-                        {a.detail}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {/* The times are what make this a decision rather than a menu. An
-                  action whose typical completion is longer than the remaining
-                  golden hour is a different proposition, and the investigator is
-                  the one who should weigh that — not the interface, silently. */}
-              <p className="mt-3 text-[11px] text-ink-500">
-                Times are typical completion, not guarantees. Weigh them against{" "}
-                {item.fact_strip.golden_hour_position_minutes} minutes already elapsed.
-              </p>
-              <p className="mt-2 text-[10px] italic text-ink-300">
-                Buttons are inert — intervention recording is not built (§26).
-              </p>
-            </Card>
+          {/* Interactive Nav Tabs */}
+          <div className="flex items-center justify-between border-b border-line pb-3">
+            <div className="flex space-x-6 text-sm">
+              <button 
+                onClick={() => setActiveTab('caseDetails')}
+                className={`pb-3 -mb-3 font-semibold transition-all ${
+                  activeTab === 'caseDetails' 
+                    ? 'text-blue-400 border-b-2 border-blue-500' 
+                    : 'text-ink-500 hover:text-ink-700'
+                }`}
+              >
+                Case Details
+              </button>
+              <button 
+                onClick={() => setActiveTab('suspects')}
+                className={`pb-3 -mb-3 font-semibold transition-all ${
+                  activeTab === 'suspects' 
+                    ? 'text-blue-400 border-b-2 border-blue-500' 
+                    : 'text-ink-500 hover:text-ink-700'
+                }`}
+              >
+                Suspects / Victims ({SUSPECTS_DATA.length})
+              </button>
+              <button 
+                onClick={() => setActiveTab('evidence')}
+                className={`pb-3 -mb-3 font-semibold transition-all ${
+                  activeTab === 'evidence' 
+                    ? 'text-blue-400 border-b-2 border-blue-500' 
+                    : 'text-ink-500 hover:text-ink-700'
+                }`}
+              >
+                Evidence Management ({evidenceList.length})
+              </button>
+            </div>
 
-            <Card title="Risk factors">
-              <ul className="space-y-2">
-                {/* `sentence`, never `feature`. §25.4 requires factors to render
-                    as sentences carrying a quantity and a window; the raw SHAP
-                    feature name is audit/debug only and must not reach an
-                    investigator. */}
-                {item.prediction.candidates[0]?.contributing_factors.map((f) => (
-                  <li key={f.feature} className="flex items-start gap-2">
-                    <ShieldAlert
-                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-severity-medium"
-                      aria-hidden
-                    />
-                    <span className="text-[12px] leading-snug text-ink-700">
-                      {f.sentence}
-                    </span>
-                  </li>
-                )) ?? (
-                  <li className="text-[12px] text-ink-500">
-                    No ranked candidate, so no contributing factors to show.
-                  </li>
-                )}
-              </ul>
-            </Card>
-
-            <Card title="Jurisdiction">
-              <div className="flex items-start gap-2.5">
-                <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-ink-300" aria-hidden />
-                <div>
-                  <p className="text-[13px] text-ink-900">
-                    {isLive && activeCase !== null
-                      ? `${activeCase.complaint.district}, ${activeCase.complaint.state}`
-                      : "Delhi Cyber Cell"}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-ink-500">
-                    Cross-jurisdiction reads return 404, not 403, and are audited
-                    either way (§29).
-                  </p>
+            {/* Pagination Controls */}
+            {activeTab === 'suspects' && (
+              <div className="flex items-center space-x-3 text-xs text-ink-500">
+                <span>Page {currentPage} of {totalPages}</span>
+                <div className="flex items-center space-x-1">
+                  <button 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    className="p-1 hover:bg-raised rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <button 
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    className="p-1 hover:bg-raised rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-              <Link
-                href="/network-graph"
-                className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-accent transition-opacity hover:opacity-80"
-              >
-                <Share2 className="h-3 w-3" aria-hidden />
-                See linked cases
-              </Link>
-            </Card>
+            )}
+          </div>
 
-            {isLive && activeCase !== null && (
-              <Card
-                title="Alert raised"
-                action={
-                  <Link
-                    href="/alerts"
-                    className="inline-flex items-center gap-1 text-[11px] text-accent transition-opacity hover:opacity-80"
-                  >
-                    Alerts <ExternalLink className="h-3 w-3" aria-hidden />
-                  </Link>
-                }
+          {/* Main Grid View */}
+          <div className="grid grid-cols-12 gap-6">
+            {/* Tabbed Panel Section */}
+            <div className={`${isCaseNotesOpen ? 'col-span-8' : 'col-span-12'} transition-all space-y-4`}>
+              
+              {/* TAB 1: CASE DETAILS */}
+              {activeTab === 'caseDetails' && (
+                <div className="bg-surface border border-line rounded-xl p-6 space-y-6">
+                  <h3 className="font-semibold text-ink-900 text-base">Overview & Case Parameters</h3>
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="bg-paper p-4 rounded-lg border border-line space-y-1">
+                      <span className="text-ink-500">Assigned Investigator</span>
+                      <p className="font-medium text-ink-700 text-sm">{caseDetails.assignedTo}</p>
+                    </div>
+                    <div className="bg-paper p-4 rounded-lg border border-line space-y-1">
+                      <span className="text-ink-500">Estimated Loss</span>
+                      <p className="font-bold text-rose-400 text-sm">{caseDetails.totalLoss}</p>
+                    </div>
+                    <div className="bg-paper p-4 rounded-lg border border-line space-y-1">
+                      <span className="text-ink-500">Date Opened</span>
+                      <p className="font-medium text-ink-700 text-sm">{caseDetails.dateOpened}</p>
+                    </div>
+                    <div className="bg-paper p-4 rounded-lg border border-line space-y-1">
+                      <span className="text-ink-500">Primary Incident Type</span>
+                      <p className="font-medium text-ink-700 text-sm">Online Banking Fraud / Phishing</p>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold text-ink-500 mb-2">Case Summary</h4>
+                    <p className="text-xs text-ink-700 bg-paper p-4 rounded-lg border border-line leading-relaxed">
+                      {caseDetails.description}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: SUSPECTS / VICTIMS */}
+              {activeTab === 'suspects' && (
+                <div className="grid grid-cols-2 gap-4">
+                  {paginatedSuspects.map((suspect) => (
+                    <div 
+                      key={suspect.id}
+                      onClick={() => setSelectedSuspect(suspect)}
+                      className={`bg-surface border rounded-xl p-4 cursor-pointer transition-all space-y-4 ${
+                        selectedSuspect.id === suspect.id 
+                          ? 'border-blue-500 ring-1 ring-blue-500/50 shadow-lg' 
+                          : 'border-line hover:border-line-strong'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-raised rounded-lg flex items-center justify-center font-bold text-ink-700">
+                            {suspect.name.charAt(0)}
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-ink-900 text-sm">{suspect.name}</h4>
+                            <div className="flex items-center space-x-2 mt-0.5">
+                              <span className="text-rose-400 font-bold text-xs">{suspect.riskScore}</span>
+                              <span className="text-[10px] text-ink-500">Risk Score</span>
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                          suspect.status === 'Under Investigation' 
+                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
+                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        }`}>
+                          {suspect.status}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-y-1.5 text-xs border-t border-line pt-3 text-ink-700">
+                        <span className="text-ink-500">DOB:</span> <span>{suspect.dob}</span>
+                        <span className="text-ink-500">Mobile:</span> <span>{suspect.mobile}</span>
+                        <span className="text-ink-500">KYC:</span> <span className="text-emerald-400">{suspect.kyc}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* TAB 3: EVIDENCE MANAGEMENT */}
+              {activeTab === 'evidence' && (
+                <div className="space-y-3">
+                  {evidenceList.map((item) => (
+                    <div key={item.id} className="bg-surface border border-line hover:border-line-strong rounded-xl p-4 flex items-center justify-between transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2.5 bg-raised rounded-lg text-blue-400">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-semibold text-ink-700">{item.title}</h4>
+                          <p className="text-[10px] text-ink-500">{item.category} • {item.meta}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-6 text-xs text-ink-500">
+                        <div className="text-right">
+                          <p className="text-[10px] text-ink-500">Accessed</p>
+                          <p className="text-ink-700">{item.accessed}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-ink-500">Analyses</p>
+                          <p className="text-blue-400 font-semibold">{item.analysesCount}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Toggleable Right Panel - Case Notes */}
+            {isCaseNotesOpen && (
+              <div className="col-span-4 bg-surface border border-line rounded-xl p-4 flex flex-col justify-between h-[420px]">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <h3 className="font-semibold text-ink-900 text-xs">Case Notes Log</h3>
+                    <button onClick={() => setIsCaseNotesOpen(false)} className="text-ink-500 hover:text-ink-700">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Notes Feed */}
+                  <div className="space-y-3 overflow-y-auto max-h-[280px] pr-1">
+                    {notes.map((note) => (
+                      <div key={note.id} className="flex items-start space-x-2 text-xs bg-paper p-2.5 rounded-lg border border-line">
+                        <div className="w-5 h-5 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">
+                          I
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-ink-700 font-medium text-[11px]">{note.author}</p>
+                          <p className="text-[11px] text-ink-500 leading-snug mt-0.5">{note.text}</p>
+                          <span className="text-[9px] text-slate-600 mt-1 block">{note.time}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Submit New Note Input */}
+                <form onSubmit={handleAddNote} className="pt-2 border-t border-line">
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      value={newNote}
+                      onChange={(e) => setNewNote(e.target.value)}
+                      placeholder="Add investigation note..."
+                      className="w-full bg-paper border border-line-strong rounded-lg pl-3 pr-10 py-2 text-xs text-ink-700 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    />
+                    <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-blue-500 hover:text-blue-400">
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+
+          {/* Toggleable Interactive Case Timeline Section */}
+          <div className="bg-surface border border-line rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <h3 className="font-semibold text-ink-900 text-base">Interactive Timeline Events</h3>
+                <span className="text-xs text-ink-500">(Click nodes to inspect details)</span>
+              </div>
+              <button 
+                onClick={() => setIsTimelineOpen(!isTimelineOpen)}
+                className="text-xs text-blue-400 hover:underline"
               >
-                <p className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[12px] text-ink-900">
-                    {activeCase.alert.alert_id}
-                  </span>
-                  <span className="text-[10px] uppercase tracking-wider text-severity-high">
-                    {activeCase.alert.severity}
-                  </span>
-                </p>
-                <p className="mt-1.5 text-[11.5px] leading-snug text-ink-700">
-                  {activeCase.alert.reason}
-                </p>
-              </Card>
+                {isTimelineOpen ? 'Collapse Timeline' : 'Expand Timeline'}
+              </button>
+            </div>
+
+            {isTimelineOpen && (
+              <div className="relative py-6">
+                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-raised -translate-y-1/2"></div>
+                
+                <div className="relative grid grid-cols-5 gap-4">
+                  {caseTimeline.map((event) => (
+                    <div 
+                      key={event.id}
+                      onClick={() => setSelectedTimelineEvent(selectedTimelineEvent === event.id ? null : event.id)}
+                      className="flex flex-col items-center cursor-pointer group"
+                    >
+                      {/* Event Box */}
+                      <div className={`p-2.5 rounded-lg text-left w-full space-y-1 transition-all ${
+                        selectedTimelineEvent === event.id 
+                          ? 'bg-blue-900/30 border border-blue-500' 
+                          : 'bg-paper border border-line-strong/80 group-hover:border-slate-500'
+                      }`}>
+                        <p className="text-xs font-semibold text-ink-700 truncate">{event.title}</p>
+                        {event.amount && <p className="text-xs font-bold text-rose-400">{event.amount}</p>}
+                        <p className="text-[9px] text-ink-500">{event.date}</p>
+                        {selectedTimelineEvent === event.id && (
+                          <p className="text-[10px] text-blue-300 pt-1 border-t border-line">{event.detail}</p>
+                        )}
+                      </div>
+
+                      {/* Node Indicator */}
+                      <div className={`w-3 h-3 rounded-full my-2 border-2 border-[#0F172A] transition-all ${
+                        selectedTimelineEvent === event.id ? 'bg-blue-400 scale-125' : 'bg-slate-600 group-hover:bg-blue-500'
+                      }`}></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
       </div>
-    </>
+
+      {/* Upload Evidence Modal */}
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-line rounded-xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="font-semibold text-ink-900 text-base flex items-center space-x-2">
+                <FileUp className="w-5 h-5 text-blue-400" />
+                <span>Upload Case Evidence</span>
+              </h3>
+              <button onClick={() => setIsUploadModalOpen(false)} className="text-ink-500 hover:text-ink-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadEvidence} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-ink-500 mb-1">Evidence Title / Description</label>
+                <input 
+                  type="text" 
+                  required
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  placeholder="e.g. Call Detail Records (CDR) Dump"
+                  className="w-full bg-paper border border-line-strong rounded-lg px-3 py-2 text-ink-700 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-ink-500 mb-1">Evidence Category</label>
+                <select 
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value)}
+                  className="w-full bg-paper border border-line-strong rounded-lg px-3 py-2 text-ink-700 focus:outline-none focus:border-blue-500"
+                >
+                  <option>Digital Forensic</option>
+                  <option>Video Recording</option>
+                  <option>Telecom Records</option>
+                  <option>Financial Statement</option>
+                  <option>Documentation</option>
+                </select>
+              </div>
+
+              <div className="border-2 border-dashed border-line-strong rounded-lg p-6 text-center space-y-2 hover:border-blue-500/50 transition-colors cursor-pointer">
+                <Upload className="w-8 h-8 text-ink-500 mx-auto" />
+                <p className="text-ink-700 font-medium">Click or drag files here to attach</p>
+                <p className="text-[10px] text-ink-500">Supports PDF, PNG, MP4, CSV up to 50MB</p>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-line">
+                <button 
+                  type="button" 
+                  onClick={() => setIsUploadModalOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-raised text-ink-700 hover:bg-slate-700"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-ink-900 hover:bg-blue-500 font-medium"
+                >
+                  Submit Evidence
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

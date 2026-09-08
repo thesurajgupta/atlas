@@ -343,7 +343,7 @@ async def main() -> int:
             for case_index, evidence, endpoint in ALERT_CANDIDATES:
                 ref, _title, _status, amount, complaint_index = CASES[case_index]
                 typology, _amt, minutes_ago, _narr = COMPLAINTS[complaint_index]
-                decision = await evaluate_and_record(
+                decision, _alert = await evaluate_and_record(
                     session,
                     AlertCandidate(
                         case_ref=ref,

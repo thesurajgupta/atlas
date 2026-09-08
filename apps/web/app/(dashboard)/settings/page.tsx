@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { auth, getProfile, logout, type Profile } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { useSignedIn } from "@/lib/use-signed-in";
 import { PageHeader } from "@/components/nav/PageHeader";
 import { Card } from "@/components/ui/Card";
 
@@ -46,18 +47,18 @@ const POLICY = [
 ];
 
 export default function SettingsPage() {
+  const signedIn = useSignedIn();
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    if (!auth.isSignedIn()) {
-      router.replace("/login");
-      return;
-    }
+    // No redirect: `AutoSignIn` in the layout handles a signed-out console, and
+    // bouncing a presenter to a sign-in form mid-demo is the dead end that was.
+    if (!signedIn) return;
     getProfile()
       .then(setProfile)
       .catch(() => undefined);
-  }, [router]);
+  }, [router, signedIn]);
 
   return (
     <>

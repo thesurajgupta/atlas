@@ -48,66 +48,67 @@ name or colour.
   stubbed or missing; Summary and Prediction & Why are real.
 - No live data — everything reads from `lib/mock-data.ts`.
 
-## The demo path: reporting portal → console
+## The reporting portal (`/ncrp`)
 
-The SIH demonstration runs one complaint end to end, and every screen it
-touches renders the *same* case object. There is one record and one
-derivation; no screen keeps its own copy of an amount or an identifier.
+The citizen-facing half of the demonstration. A complaint filed here is filed
+into ATLAS for real — it is not a mock hand-off.
 
 ### Route
 
 ```
-/ncrp                     citizen-facing complaint intake (light, separate product)
-/ncrp/acknowledgement     the reference, the record as filed, and "Send to ATLAS"
-/atlas-intake             the handover: complaint → ingestion → trail → analysis
-                          → prediction → alert, staged so it can be followed
-/investigation?case=…     the console, on that case
-/pipeline                 the same pipeline as a record, replayable
+/ncrp                     complaint intake (light, deliberately a separate product)
+/ncrp/acknowledgement      the reference, the record as filed, and "Send to ATLAS"
 ```
 
 The portal is **not** the National Cybercrime Reporting Portal, carries no
-government emblem, and says so on every screen. It stores only what the
-presenter types, in this browser.
+government emblem, and says so on every screen.
 
-### How it holds together
+### How the hand-off works
 
-- `lib/demo/types.ts` — the contract. `NcrpComplaint` is the only stored
-  record; everything else is derived from it.
-- `lib/demo/case.ts` — `buildDemoCase(complaint)`, a **pure function**. Trail,
-  network, features, ranking, prediction and alert all come out of here, which
-  is what makes "the amount on the portal is the amount in the alert" a
-  property of the code rather than something to remember.
-- `lib/demo/store.tsx` — persistence. The complaint is written to
-  `localStorage` and read through `useSyncExternalStore`, so it survives
-  navigation, a reload and a second tab. `useDemoCase()` is the only way in.
-- `lib/demo/ledger.ts` — the synthetic transaction ledger, keyed by
-  transaction reference. Legs are *fractions* of the disputed amount, so the
-  presenter can type any figure and the trail still adds up to it. Seeded
-  references are `TXN001`, `TXN002`, `TXN003`; anything else still traces, to
-  a chain derived deterministically from the reference, and costs the case one
-  evidence band because nothing in the ledger backs it.
-- `lib/demo/endpoints.ts` — the cash-out endpoint catalogue, shared by the
-  map, the ranked-locations page, the prediction and the alert. It used to
-  live inside the map page, which is how those four could name different
-  places for the same case.
+"Send to ATLAS" calls **`runInvestigation()` from `lib/run-investigation`** —
+the same function `/demo` and `/new-complaint` call — with the values the
+citizen typed. Four of its six stages are real API calls, and the stage list on
+the acknowledgement page labels which are which. There is one pipeline; the
+portal is another way into it, not a second copy of it.
 
-### What the ranking is
+The join is the complaint reference. `complaint_id` is minted once at filing and
+passed in as `caseRef`, so it becomes the reference on the complaint the API
+stores, on the transaction chain built for it, on the trail the graph endpoint
+walks and on the alert the policy records. Every console screen is keyed on it.
 
-A weighted mean of five stated features, each on 0–1, with constant weights.
-It is **not** a trained model and not a calibrated probability — `MODEL_VERSION`
-says so, and every screen that shows a score repeats it. `Source data` in the
-sidebar shows the complaint, the transaction rows and the per-feature
-contributions behind any number on screen.
+### What crosses the boundary, and what does not
+
+| Sent to ATLAS | Kept on the portal |
+|---|---|
+| complaint reference, category, amount, incident instant, narrative | bank, masked account, transaction reference, mobile, attachment name |
+
+ATLAS forecasts the cash-out leg of reported fraud and never scores individuals
+(`docs/NON-GOALS.md`), so victim identity is data it has no use for. The portal
+keeps those fields only so a complainant can be shown what they filed, and both
+screens say so.
+
+### Files
+
+- `lib/demo/types.ts` — the portal record. Nothing derived, nothing predicted.
+- `lib/demo/store.tsx` — `localStorage` via `useSyncExternalStore`, so a filed
+  complaint survives a reload. (`lib/demo-run` uses `sessionStorage`, because a
+  walkthrough should not outlive the tab; a filed complaint should.)
+- `lib/demo/typology.ts` — NCRP's categories mapped onto the API's vocabulary.
+  "Online Financial Fraud" is a category heading covering several typologies, so
+  it maps to `OTHER` rather than being nudged into the nearest specific one.
+- `lib/demo/defaults.ts` — opening form values, relative to the wall clock.
+- `components/ncrp/ComplaintForm.tsx` — mounted `ssr: false`; see the file.
+
+### Requirements
+
+The hand-off needs the API up (`make up`, migrations, `scripts/seed_demo.py`).
+`runInvestigation` signs itself in with the seeded development account, so there
+is no sign-in step in the walkthrough — but with the API down, "Send to ATLAS"
+reports that it could not reach it rather than pretending to succeed.
 
 ### Running it again
 
-`Reset demo` in the sidebar (or the portal header) clears the complaint and the
-case. The whole flow can then be run from the beginning, as many times as
-needed.
-
-### Tests
-
-`tests/demo-case.test.ts` asserts the joins that must not drift: the amount,
-the transaction reference, the victim account and the case id are the same
-value in the complaint, the case, the prediction and the alert; the trail sums
-to the reported figure; the ranking is complete, ordered and reproducible.
+`Reset demo` in the sidebar or the portal header clears **both** the portal
+record and the console walkthrough. It does not delete rows the API already
+wrote — those stay on `/cases` and `/alerts`, which is correct: a demonstration
+reset is not a database reset.

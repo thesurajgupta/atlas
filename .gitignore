@@ -1,6 +1,9 @@
 # ---- Secrets: never commit ----
 .env
 .env.*
+# The example is documentation, not a secret — it names variables and
+# explains the trade-offs, and carries no values anyone could misuse.
+!.env*.example
 !.env.example
 *.pem
 *.key

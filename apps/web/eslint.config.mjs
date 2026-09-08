@@ -7,8 +7,14 @@ import nextTs from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  // public/vendor holds verbatim copies of dependency bundles (see
-  // scripts/sync-map-worker.mjs). Linting a vendor build reports on code this
-  // repository does not own and cannot fix.
-  globalIgnores([".next/**", "out/**", "build/**", "public/vendor/**", "next-env.d.ts"]),
+  // `public/maplibre-gl-*.mjs` is vendor output copied in by
+  // `scripts/copy-maplibre-worker.mjs`, not source. Linting it produces a
+  // thousand warnings about minified code nobody here wrote.
+  globalIgnores([
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "public/maplibre-gl-*.mjs",
+  ]),
 ]);

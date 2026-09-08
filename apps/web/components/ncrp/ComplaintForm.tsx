@@ -5,31 +5,29 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { defaultComplaintDraft, parseAmount, rupees, type ComplaintDraft } from '@/lib/demo/defaults';
-import { SEEDED_TRANSACTION_REFS, resolveTemplate } from '@/lib/demo/ledger';
-import { useDemoCase } from '@/lib/demo/store';
+import { useNcrpComplaint } from '@/lib/demo/store';
 import { COMPLAINT_TYPES } from '@/lib/demo/types';
 
 /**
  * Complaint registration.
  *
- * Every field is editable and every field is used. What the presenter types is
- * what `buildDemoCase` derives the case from, so the amount on this form is the
- * amount in the alert, and the transaction reference typed here is the
- * reference on the first hop of the money trail. There is no second set of
- * values anywhere.
+ * Every field is editable, and the ones ATLAS models are carried through
+ * unchanged: the amount typed here is the amount on the complaint the API
+ * stores, the total of the transaction chain built for it, and the figure the
+ * alert policy weighs. The reference minted on submission becomes the case
+ * reference on every console screen.
  *
  * ## Two things this form deliberately does
  *
- * **It shows the ledger join live.** As soon as a transaction reference is
- * typed, the panel on the right says whether it names a seeded synthetic record
- * and what shape of chain that record has. A judge asking "so what is it
- * actually matching on?" gets an answer before the complaint is even filed, and
- * a presenter who mistypes finds out here rather than three screens later.
+ * **It says what will be sent, while it is being typed.** The panel on the
+ * right lists the values ATLAS receives. A judge asking "so what is it actually
+ * acting on?" gets an answer before the complaint is even filed.
  *
- * **It collects no real personal data.** The mobile number is masked by default
- * and nothing on this page leaves the browser. This is a demonstration
- * interface; a live portal would need consent, retention and transport rules
- * that a hackathon build has no business pretending to implement.
+ * **It collects no real personal data.** The mobile number is masked by
+ * default, and the contact fields never leave this browser — ATLAS forecasts
+ * the cash-out leg of reported fraud and does not score individuals. This is a
+ * demonstration interface; a live portal would need consent, retention and
+ * transport rules a hackathon build has no business pretending to implement.
  */
 
 const FIELD =
@@ -70,7 +68,7 @@ function Section({
 
 export default function NcrpComplaintForm() {
   const router = useRouter();
-  const { submit, stage, complaint, hydrated } = useDemoCase();
+  const { submit, stage, complaint, hydrated } = useNcrpComplaint();
 
   // Safe to read the wall clock in an initialiser because this component is
   // mounted client-only — see the `ssr: false` import in `app/ncrp/page.tsx`.
@@ -86,7 +84,6 @@ export default function NcrpComplaintForm() {
     setDraft((current) => ({ ...current, [key]: value }));
 
   const amount = parseAmount(draft.fraud_amount);
-  const ledger = resolveTemplate(draft.transaction_id);
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -394,23 +391,26 @@ export default function NcrpComplaintForm() {
           </div>
         </div>
 
-        {/* --- the join, shown while typing ------------------------------- */}
+        {/* --- what crosses to ATLAS, shown while typing ------------------
+            Only the four fields that are actually sent. It listed the account
+            and the transaction reference too, which was wrong the moment the
+            portal started filing through the real complaints API: those stay
+            here, and a panel headed "what ATLAS will receive" must not name
+            them. */}
         <aside className="space-y-4 lg:sticky lg:top-5 lg:self-start">
           <div className="rounded-lg border border-[#D8DFE8] bg-white">
             <div className="border-b border-[#E7ECF2] px-4 py-3">
               <h2 className="text-[13.5px] font-semibold text-[#1B2733]">What ATLAS will receive</h2>
               <p className="mt-0.5 text-[11.5px] text-[#7A8798]">
-                Updates as you type. These are the exact values the case is built from.
+                Updates as you type. These are the exact values the case is opened on.
               </p>
             </div>
             <dl className="divide-y divide-[#EEF2F6] text-[12.5px]">
               {[
+                ['Reference', 'issued on submit'],
                 ['Complaint type', draft.complaint_type],
                 ['Incident', `${draft.incident_date} · ${draft.incident_time} IST`],
                 ['Amount', amount === null ? '—' : rupees(amount)],
-                ['Victim account', draft.victim_account || '—'],
-                ['Transaction ID', draft.transaction_id || '—'],
-                ['Bank', draft.victim_bank || '—'],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-baseline justify-between gap-3 px-4 py-2">
                   <dt className="shrink-0 text-[#7A8798]">{label}</dt>
@@ -420,39 +420,22 @@ export default function NcrpComplaintForm() {
             </dl>
           </div>
 
-          {/* Always present: `resolveTemplate` answers for any reference, seeded
-              or not, and the two answers are what the panel distinguishes. */}
-          <div
-              className={`rounded-lg border px-4 py-3 ${
-                ledger.matched
-                  ? 'border-[#B7DCC3] bg-[#F0F9F3]'
-                  : 'border-[#E4D7B4] bg-[#FFF7E3]'
-              }`}
-            >
-              <h2 className="text-[13px] font-semibold text-[#1B2733]">
-                {ledger.matched ? 'Matched in the transaction ledger' : 'No ledger record for this reference'}
-              </h2>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-[#4A5A6D]">
-                {ledger.matched ? (
-                  <>
-                    <span className="font-mono">{draft.transaction_id.toUpperCase()}</span> names a
-                    seeded synthetic record: {ledger.template.description.toLowerCase()}, traced to a
-                    depth of {ledger.template.maxDepth}.
-                  </>
-                ) : (
-                  <>
-                    Nothing in the synthetic ledger is keyed on{' '}
-                    <span className="font-mono">{draft.transaction_id.toUpperCase() || '—'}</span>.
-                    ATLAS will still trace it — the chain is derived from the reference itself, so
-                    it is the same every time you type it — but the case carries one evidence band
-                    less, and says why.
-                  </>
-                )}
-              </p>
-              <p className="mt-2 text-[11px] text-[#7A8798]">
-                Seeded references: {SEEDED_TRANSACTION_REFS.join(', ')}
-              </p>
-            </div>
+          {/* What crosses the boundary, and what does not.
+              Worth showing rather than asserting: a judge asking about victim
+              privacy is asking about exactly this, and "ATLAS never receives
+              the mobile number" reads very differently on screen than in a
+              policy document. */}
+          <div className="rounded-lg border border-[#D8DFE8] bg-white px-4 py-3">
+            <h2 className="text-[13px] font-semibold text-[#1B2733]">Stays on this portal</h2>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-[#4A5A6D]">
+              Bank, masked account, transaction reference and mobile number are kept here so the
+              complaint can be shown back to you. ATLAS forecasts where stolen money is withdrawn
+              and never scores individuals, so it is sent none of them.
+            </p>
+            <p className="mt-2 text-[11px] text-[#7A8798]">
+              ATLAS receives the reference, the category, the amount and when it happened.
+            </p>
+          </div>
 
           <div className="rounded-lg border border-[#D8DFE8] bg-white px-4 py-3">
             <h2 className="text-[13px] font-semibold text-[#1B2733]">After you submit</h2>

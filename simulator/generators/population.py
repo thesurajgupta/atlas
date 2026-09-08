@@ -56,14 +56,38 @@ class Population:
         self._account_zone[account.account_id] = zone
         return account
 
-    def sample_mule(self, rng: Random, *, near: AccountRef | None = None) -> AccountRef:
+    def sample_mule(
+        self,
+        rng: Random,
+        *,
+        near: AccountRef | None = None,
+        exclude: AccountRef | None = None,
+    ) -> AccountRef:
+        """Draw a mule account, optionally near ``near`` and never ``exclude``.
+
+        ``exclude`` exists because reuse is deliberate here — a mule that has
+        been used before is *more* likely to be drawn again, which is what makes
+        the degree distribution heavy-tailed and realistic. But that same
+        weighting let a chain draw the account it had just paid, producing a hop
+        from an account to itself. 1.2% of hops and 3.1% of scenarios carried one
+        before this, and `graph.transaction_edge` rejects them outright with
+        `ck_transaction_edge_no_self_loop` — correctly, since money moving from
+        an account to itself is not a hop and would sit in a trail as a step that
+        goes nowhere.
+        """
         near_zone = (
             self._account_zone.get(near.account_id) if near is not None else None
         )
         zone = sample_mule_zone(rng, near=near_zone)
         pool = self._mules_by_zone.setdefault(zone.code, [])
 
-        if not pool or rng.random() < self._new_mule_probability:
+        candidates = (
+            [a for a in pool if exclude is None or a.account_id != exclude.account_id]
+            if exclude is not None
+            else pool
+        )
+
+        if not candidates or rng.random() < self._new_mule_probability:
             account = AccountRef(
                 account_id=self._new_id("mule"), jurisdiction_id=zone.code
             )
@@ -72,8 +96,8 @@ class Population:
             self._account_zone[account.account_id] = zone
             return account
 
-        weights = [self._mule_weight[a.account_id] for a in pool]
-        chosen: AccountRef = rng.choices(pool, weights=weights, k=1)[0]
+        weights = [self._mule_weight[a.account_id] for a in candidates]
+        chosen: AccountRef = rng.choices(candidates, weights=weights, k=1)[0]
         self._mule_weight[chosen.account_id] += 1
         return chosen
 

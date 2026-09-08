@@ -25,8 +25,24 @@ class StubAccountPool:
     def sample_victim(self, rng: Random) -> AccountRef:
         return AccountRef(account_id=f"victim-{rng.randint(0, 1_000_000)}")
 
-    def sample_mule(self, rng: Random, *, near: AccountRef | None = None) -> AccountRef:
-        return AccountRef(account_id=f"mule-{rng.randint(0, 1_000_000)}")
+    def sample_mule(
+        self,
+        rng: Random,
+        *,
+        near: AccountRef | None = None,
+        exclude: AccountRef | None = None,
+    ) -> AccountRef:
+        """Honours ``exclude`` rather than ignoring it.
+
+        A stub that accepted the argument and dropped it would let the
+        no-self-loop test below pass against a generator that had stopped
+        passing `exclude` at all — which is the failure the argument exists to
+        prevent.
+        """
+        while True:
+            account = AccountRef(account_id=f"mule-{rng.randint(0, 1_000_000)}")
+            if exclude is None or account.account_id != exclude.account_id:
+                return account
 
 
 class StubEndpointRegistry:
@@ -38,6 +54,30 @@ class StubEndpointRegistry:
         return EndpointRef(
             endpoint_id=f"ep-{rng.randint(0, 1_000_000)}", channel=channel
         )
+
+
+@pytest.mark.parametrize("typology", list(GENERATORS))
+def test_no_hop_moves_money_from_an_account_to_itself(typology: FraudTypology) -> None:
+    """Mule reuse is deliberate; paying yourself is not.
+
+    Reuse is what makes the degree distribution heavy-tailed, and the weighting
+    that produces it let a chain draw the account it had just paid. 1.2% of hops
+    carried a self-loop before ``exclude`` was threaded through, and
+    ``graph.transaction_edge`` rejects them outright — a hop from an account to
+    itself is a step in a trail that goes nowhere.
+    """
+    generator = GENERATORS[typology]()
+    for seed in range(25):
+        scenario = generator.generate(
+            Random(seed),
+            StubAccountPool(),
+            StubEndpointRegistry(),
+            fraud_initiated_at=FRAUD_INITIATED_AT,
+        )
+        for hop in scenario.hops:
+            assert hop.from_account.account_id != hop.to_account.account_id, (
+                f"{typology} seed {seed}: hop pays its own account"
+            )
 
 
 @pytest.mark.parametrize("typology", list(GENERATORS))

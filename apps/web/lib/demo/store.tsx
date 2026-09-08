@@ -1,45 +1,34 @@
 'use client';
 
 /**
- * The demo's persistence layer: one complaint, stored once, read everywhere.
+ * The reporting portal's own record of what a citizen filed.
  *
- * ## Why `localStorage` and not React state
+ * ## What this is not
  *
- * The requirement the whole feature turns on is that a complaint filed on
- * `/ncrp` is still the same complaint on `/alerts` after three navigations and
- * a browser refresh. Component state does not survive a route change, and a
- * context alone does not survive a reload. So the complaint is written to
- * `localStorage` and everything else reads it.
+ * It is **not** a second copy of the case. ATLAS's side — complaint row, money
+ * trail, signals, ranking, alert — is produced by `lib/run-investigation`
+ * against the real API and held in `lib/demo-run`. Nothing in this module
+ * derives, scores or predicts anything, and no ATLAS screen reads it.
  *
- * ## Why the complaint and not the case
+ * What it holds is the citizen-facing record: the fields a complainant supplies
+ * that the API deliberately has no column for, plus whether the complaint has
+ * been referred yet. The portal has to be able to show somebody the complaint
+ * they filed after a reload, and that is the whole job.
  *
- * Only the `NcrpComplaint` is stored. The case, trail, network, ranked
- * locations and alert are **derived** on read by `buildDemoCase`, which is a
- * pure function of the complaint. Storing the derived case as well would create
- * a second copy of every amount and identifier, and a second copy is exactly
- * the thing that eventually disagrees with the first. There is nothing to keep
- * in sync because there is only one record.
+ * ## Why `localStorage` and `useSyncExternalStore`
  *
- * ## Why `useSyncExternalStore`
+ * A complaint filed on `/ncrp` must still be there on `/ncrp/acknowledgement`
+ * after a navigation and a refresh. Component state does not survive a route
+ * change and a context does not survive a reload. `localStorage` plus a change
+ * event is an external store, and this is the hook React provides for reading
+ * one: it gets the server pass right for free — `getServerSnapshot` returns
+ * "nothing filed", the only honest answer on a server that cannot see this
+ * browser — and avoids the read-then-`setState`-in-an-effect pattern, which
+ * renders twice and tears if two components read at different moments.
  *
- * `localStorage` plus a change event is an external store, and this is the hook
- * React provides for reading one. It gets the server pass right for free —
- * `getServerSnapshot` returns "nothing stored", which is the only honest answer
- * on a server that cannot see this browser — and it avoids the read-then-
- * `setState`-in-an-effect pattern, which renders twice and tears if two
- * components read at different moments.
- *
- * ## Why not the ATLAS API
- *
- * `POST /api/v1/complaints` exists and is the right home for this in a
- * deployment. It needs PostgreSQL, Redis, migrations and a seeded operator
- * account — a stack that must be up before a judge sees anything. This store is
- * the console's own data layer for the demo path, and it is a *single* layer:
- * no screen keeps its own copy, and `useDemoCase` is the only way in.
- *
- * Everything stored here is synthetic and typed by the presenter. The portal is
- * a demonstration interface built for SIH; it is not NCRP and is not connected
- * to it.
+ * `demo-run` uses `sessionStorage` because a walkthrough should not outlive the
+ * tab. This one uses `localStorage` because a filed complaint should: a citizen
+ * closing the tab has still filed it.
  */
 
 import {
@@ -51,10 +40,11 @@ import {
   type ReactNode,
 } from 'react';
 
-import { buildDemoCase } from './case';
-import type { DemoCase, NcrpComplaint } from './types';
+import { writeRun } from '@/lib/demo-run';
 
-const STORAGE_KEY = 'atlas.demo.complaint.v1';
+import type { NcrpComplaint } from './types';
+
+const STORAGE_KEY = 'atlas.ncrp.complaint.v2';
 
 /**
  * Broadcast to every subscriber in *this* tab.
@@ -62,33 +52,28 @@ const STORAGE_KEY = 'atlas.demo.complaint.v1';
  * The `storage` event only fires in other tabs, so without this a submission on
  * `/ncrp` would not reach a component already mounted beside it.
  */
-const CHANGE_EVENT = 'atlas-demo-change';
+const CHANGE_EVENT = 'atlas:ncrp-complaint';
 
-export type DemoStage = 'NONE' | 'SUBMITTED' | 'IN_ATLAS';
+export type PortalStage = 'NONE' | 'SUBMITTED' | 'REFERRED';
 
-interface StoredState {
+interface StoredRecord {
   readonly complaint: NcrpComplaint;
-  readonly stage: Exclude<DemoStage, 'NONE'>;
+  readonly stage: Exclude<PortalStage, 'NONE'>;
   /** When the complaint was handed to ATLAS, ISO 8601. */
-  readonly sent_to_atlas_at: string | null;
+  readonly referred_at: string | null;
 }
 
-function parse(raw: string | null): StoredState | null {
+function parse(raw: string | null): StoredRecord | null {
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      'complaint' in parsed &&
-      'stage' in parsed
-    ) {
-      return parsed as StoredState;
+    if (parsed !== null && typeof parsed === 'object' && 'complaint' in parsed && 'stage' in parsed) {
+      return parsed as StoredRecord;
     }
     return null;
   } catch {
-    // A value written by an older build. Treat it as "no demo in progress"
-    // rather than crashing the page a presenter is standing in front of.
+    // A value written by an older build. Treat it as "nothing filed" rather
+    // than crashing the page a presenter is standing in front of.
     return null;
   }
 }
@@ -99,31 +84,29 @@ function parse(raw: string | null): StoredState | null {
  * every read would hand back a new object each time.
  */
 let cachedRaw: string | null = null;
-let cachedState: StoredState | null = null;
+let cachedRecord: StoredRecord | null = null;
 
-function readSnapshot(): StoredState | null {
+function readSnapshot(): StoredRecord | null {
   let raw: string | null = null;
   try {
     raw = window.localStorage.getItem(STORAGE_KEY);
   } catch {
-    // Private mode, or site data blocked. The demo still runs; it just will not
-    // survive a reload.
+    // Private mode, or site data blocked. The portal still works; it just will
+    // not survive a reload.
     raw = null;
   }
   if (raw !== cachedRaw) {
     cachedRaw = raw;
-    cachedState = parse(raw);
+    cachedRecord = parse(raw);
   }
-  return cachedState;
+  return cachedRecord;
 }
 
-/** The server cannot see this browser. "Nothing stored" is the honest answer. */
-const serverSnapshot = (): StoredState | null => null;
+/** The server cannot see this browser. "Nothing filed" is the honest answer. */
+const serverSnapshot = (): StoredRecord | null => null;
 
 function subscribe(onChange: () => void): () => void {
   window.addEventListener(CHANGE_EVENT, onChange);
-  // Fires in *other* tabs. Kept so a presenter with the portal and the console
-  // side by side sees one submission in both.
   window.addEventListener('storage', onChange);
   return () => {
     window.removeEventListener(CHANGE_EVENT, onChange);
@@ -131,10 +114,10 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-function writeStorage(state: StoredState | null): void {
+function write(record: StoredRecord | null): void {
   try {
-    if (state === null) window.localStorage.removeItem(STORAGE_KEY);
-    else window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (record === null) window.localStorage.removeItem(STORAGE_KEY);
+    else window.localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
   } catch {
     /* storage unavailable — see `readSnapshot` */
   }
@@ -144,52 +127,37 @@ function writeStorage(state: StoredState | null): void {
 /**
  * Mint a complaint reference.
  *
- * The one value in the whole flow that is not derived — a reference has to be
- * new each filing. Minted exactly once, at submission, and then carried
- * verbatim: the case id, the prediction id and the alert id are all derived
- * from it, so nothing downstream can invent a second identity for the same
- * complaint.
+ * The one value in the flow that is not derived from something else. It becomes
+ * `case_ref` on the API complaint, the trail built for it and the alert raised
+ * on it, so nothing downstream can invent a second identity for the same
+ * filing.
  */
 export function mintComplaintId(now: Date = new Date()): string {
   const serial = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
   return `NCRP/${now.getFullYear()}/${serial}`;
 }
 
-export interface DemoStoreValue {
-  /**
-   * False during the server pass and the hydration render, true afterwards.
-   *
-   * Screens use it to tell "nothing has been referred" from "we cannot know
-   * yet", so a page does not flash its development fixture over a live case.
-   */
+export interface PortalStoreValue {
+  /** False during the server pass and the hydration render, true afterwards. */
   readonly hydrated: boolean;
-  readonly stage: DemoStage;
+  readonly stage: PortalStage;
   readonly complaint: NcrpComplaint | null;
-  readonly sentToAtlasAt: string | null;
-  /**
-   * The derived case, available as soon as a complaint exists.
-   *
-   * Use `activeCase` on ATLAS screens: this one is also non-null while the
-   * complaint is still sitting on the acknowledgement page, unreferred.
-   */
-  readonly demoCase: DemoCase | null;
-  /** The case ATLAS has actually received. `null` until "Send to ATLAS". */
-  readonly activeCase: DemoCase | null;
-  /** Store a submitted complaint. Returns the stored record, reference included. */
+  readonly referredAt: string | null;
+  /** Record a submitted complaint. Returns it, reference included. */
   submit(complaint: Omit<NcrpComplaint, 'complaint_id' | 'submitted_at'>): NcrpComplaint;
-  /** Hand the stored complaint to ATLAS. Idempotent. */
-  sendToAtlas(): void;
-  /** Clear the demo so the whole flow can be run again. */
+  /** Mark the complaint as handed to ATLAS. Idempotent. */
+  markReferred(): void;
+  /** Clear the portal record *and* the ATLAS walkthrough, so the demo can run again. */
   reset(): void;
 }
 
-const DemoStoreContext = createContext<DemoStoreValue | null>(null);
+const PortalContext = createContext<PortalStoreValue | null>(null);
 
 const alwaysTrue = () => true;
 const alwaysFalse = () => false;
 
-export function DemoCaseProvider({ children }: { children: ReactNode }) {
-  const state = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
+export function NcrpPortalProvider({ children }: { children: ReactNode }) {
+  const record = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
   const hydrated = useSyncExternalStore(subscribe, alwaysTrue, alwaysFalse);
 
   const submit = useCallback(
@@ -199,57 +167,55 @@ export function DemoCaseProvider({ children }: { children: ReactNode }) {
         complaint_id: mintComplaintId(),
         submitted_at: new Date().toISOString(),
       };
-      writeStorage({ complaint, stage: 'SUBMITTED', sent_to_atlas_at: null });
+      write({ complaint, stage: 'SUBMITTED', referred_at: null });
       return complaint;
     },
     [],
   );
 
-  const sendToAtlas = useCallback(() => {
-    // Read through the store rather than closing over `state`, so a referral
+  const markReferred = useCallback(() => {
+    // Read through the store rather than closing over `record`, so a referral
     // fired from a stale render still lands on what is actually stored.
     const current = readSnapshot();
-    if (current === null || current.stage === 'IN_ATLAS') return;
-    writeStorage({ ...current, stage: 'IN_ATLAS', sent_to_atlas_at: new Date().toISOString() });
+    if (current === null || current.stage === 'REFERRED') return;
+    write({ ...current, stage: 'REFERRED', referred_at: new Date().toISOString() });
   }, []);
 
-  const reset = useCallback(() => writeStorage(null), []);
+  const reset = useCallback(() => {
+    // Both halves, or the console would keep showing a walkthrough for a
+    // complaint the portal no longer has — which is the disagreement between
+    // two screens that the whole demo is built to avoid.
+    write(null);
+    writeRun(null);
+  }, []);
 
-  const demoCase = useMemo(
-    () => (state === null ? null : buildDemoCase(state.complaint)),
-    [state],
-  );
-
-  const value = useMemo<DemoStoreValue>(
+  const value = useMemo<PortalStoreValue>(
     () => ({
       hydrated,
-      stage: state?.stage ?? 'NONE',
-      complaint: state?.complaint ?? null,
-      sentToAtlasAt: state?.sent_to_atlas_at ?? null,
-      demoCase,
-      activeCase: state?.stage === 'IN_ATLAS' ? demoCase : null,
+      stage: record?.stage ?? 'NONE',
+      complaint: record?.complaint ?? null,
+      referredAt: record?.referred_at ?? null,
       submit,
-      sendToAtlas,
+      markReferred,
       reset,
     }),
-    [hydrated, state, demoCase, submit, sendToAtlas, reset],
+    [hydrated, record, submit, markReferred, reset],
   );
 
-  return <DemoStoreContext.Provider value={value}>{children}</DemoStoreContext.Provider>;
+  return <PortalContext.Provider value={value}>{children}</PortalContext.Provider>;
 }
 
 /**
- * The only way to read the demo case.
+ * The only way to read the portal record.
  *
  * Throws rather than returning a null-object if the provider is missing: a page
- * that silently rendered its old fixture because a provider was not mounted is
- * precisely the "ATLAS shows different numbers from NCRP" failure this whole
- * module exists to make impossible.
+ * that silently rendered an empty complaint because a provider was not mounted
+ * is worse than one that fails loudly in development.
  */
-export function useDemoCase(): DemoStoreValue {
-  const value = useContext(DemoStoreContext);
+export function useNcrpComplaint(): PortalStoreValue {
+  const value = useContext(PortalContext);
   if (value === null) {
-    throw new Error('useDemoCase must be used inside <DemoCaseProvider>');
+    throw new Error('useNcrpComplaint must be used inside <NcrpPortalProvider>');
   }
   return value;
 }

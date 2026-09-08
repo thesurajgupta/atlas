@@ -9,6 +9,7 @@ import {
   type ApiAuditEvent,
   type ChainStatus,
 } from "@/lib/api";
+import { useSignedIn } from "@/lib/use-signed-in";
 import { PageHeader } from "@/components/nav/PageHeader";
 
 /**
@@ -60,6 +61,7 @@ function ChainBanner({ chain }: { chain: ChainStatus }) {
 }
 
 export default function AuditPage() {
+  const signedIn = useSignedIn();
   const router = useRouter();
   const [filter, setFilter] = useState<"all" | "denied">("all");
   // The loaded page carries the filter it was loaded for, so "still loading"
@@ -85,10 +87,9 @@ export default function AuditPage() {
   const counts = { total: current?.total ?? 0, denied: deniedTotal ?? 0 };
 
   useEffect(() => {
-    if (!auth.isSignedIn()) {
-      router.replace("/login");
-      return;
-    }
+    // No redirect: `AutoSignIn` in the layout handles a signed-out console, and
+    // bouncing a presenter to a sign-in form mid-demo is the dead end that was.
+    if (!signedIn) return;
     if (deniedTotal === null) {
       // Count only — the rows come from whichever filter is selected.
       listAuditEvents("denied")

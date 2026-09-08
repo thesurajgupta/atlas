@@ -165,7 +165,7 @@ async def test_a_raised_alert_is_persisted_with_its_severity(
 ) -> None:
     jurisdiction_id = await _jurisdiction(session)
 
-    decision = await evaluate_and_record(session, _candidate(jurisdiction_id), now=NOW)
+    decision, _ = await evaluate_and_record(session, _candidate(jurisdiction_id), now=NOW)
 
     assert decision.raise_alert is True
     rows = await _rows(session, jurisdiction_id)
@@ -188,7 +188,7 @@ async def test_a_suppressed_alert_is_persisted_with_the_reason(
     """
     jurisdiction_id = await _jurisdiction(session)
 
-    decision = await evaluate_and_record(
+    decision, _ = await evaluate_and_record(
         session,
         _candidate(jurisdiction_id, evidence=EvidenceSufficiency.INSUFFICIENT),
         now=NOW,
@@ -208,7 +208,7 @@ async def test_the_stored_reason_is_the_policy_reason_verbatim(
     """A paraphrase would be a second copy that drifts from the policy."""
     jurisdiction_id = await _jurisdiction(session)
 
-    decision = await evaluate_and_record(
+    decision, _ = await evaluate_and_record(
         session, _candidate(jurisdiction_id, minutes_ago=120), now=NOW
     )
 
@@ -223,8 +223,8 @@ async def test_a_repeat_inside_the_window_does_not_raise_twice(
     """Re-running the pipeline must be silent, not duplicative."""
     jurisdiction_id = await _jurisdiction(session)
 
-    first = await evaluate_and_record(session, _candidate(jurisdiction_id), now=NOW)
-    second = await evaluate_and_record(
+    first, _ = await evaluate_and_record(session, _candidate(jurisdiction_id), now=NOW)
+    second, _ = await evaluate_and_record(
         session, _candidate(jurisdiction_id), now=NOW + timedelta(minutes=5)
     )
 
@@ -249,12 +249,12 @@ async def test_a_suppression_does_not_suppress_the_next_decision(
     """
     jurisdiction_id = await _jurisdiction(session)
 
-    refused = await evaluate_and_record(
+    refused, _ = await evaluate_and_record(
         session,
         _candidate(jurisdiction_id, evidence=EvidenceSufficiency.INSUFFICIENT),
         now=NOW,
     )
-    improved = await evaluate_and_record(
+    improved, _ = await evaluate_and_record(
         session,
         _candidate(
             jurisdiction_id, evidence=EvidenceSufficiency.STRONG, minutes_ago=25
@@ -285,7 +285,7 @@ async def test_suppressions_do_not_consume_the_budget(session: AsyncSession) -> 
         await issued_in_window(session, jurisdiction_id=jurisdiction_id, now=NOW) == 0
     )
 
-    decision = await evaluate_and_record(
+    decision, _ = await evaluate_and_record(
         session, _candidate(jurisdiction_id, case_ref="CASE-REAL"), now=NOW, budget=1
     )
     assert decision.raise_alert is True
@@ -294,10 +294,10 @@ async def test_suppressions_do_not_consume_the_budget(session: AsyncSession) -> 
 async def test_the_budget_stops_a_flood(session: AsyncSession) -> None:
     jurisdiction_id = await _jurisdiction(session)
 
-    first = await evaluate_and_record(
+    first, _ = await evaluate_and_record(
         session, _candidate(jurisdiction_id, case_ref="CASE-A"), now=NOW, budget=1
     )
-    second = await evaluate_and_record(
+    second, _ = await evaluate_and_record(
         session, _candidate(jurisdiction_id, case_ref="CASE-B"), now=NOW, budget=1
     )
 
@@ -318,7 +318,7 @@ async def test_another_jurisdictions_alerts_do_not_count(
     assert await recent_keys(session, jurisdiction_id=mine, now=NOW) == frozenset()
     assert await issued_in_window(session, jurisdiction_id=mine, now=NOW) == 0
 
-    decision = await evaluate_and_record(session, _candidate(mine), now=NOW, budget=1)
+    decision, _ = await evaluate_and_record(session, _candidate(mine), now=NOW, budget=1)
     assert decision.raise_alert is True
 
 

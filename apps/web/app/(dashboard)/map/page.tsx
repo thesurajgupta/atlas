@@ -1,22 +1,15 @@
 "use client";
 
-import { CaseBanner } from "@/components/demo/CaseBanner";
-import { PageHeader } from "@/components/nav/PageHeader";
-import CashOutMap, {
-  KIND_COLOR as MARKER_KIND_COLOR,
-  RISK_COLOR as MARKER_RISK_COLOR,
-  type CashOutMapPoint,
-} from "@/components/map/CashOutMap";
-import {
-  CASH_OUT_ENDPOINTS,
-  RING_RADII_KM,
-  SEARCH_ORIGIN,
-} from "@/lib/demo/endpoints";
-import { useDemoCase } from "@/lib/demo/store";
-import type { DemoCase } from "@/lib/demo/types";
-import { destinationPoint } from "@/lib/geo";
+import { CaseContextBar } from "@/components/demo/CaseContextBar";
+import { PipelineRail } from "@/components/demo/PipelineRail";
+import { useCaseView } from "@/lib/case-view";
+import { EndpointMap, type MapEndpoint } from "@/components/map/EndpointMap";
+import { listEndpoints, type ApiEndpoint } from "@/lib/api";
+import { useSignedIn } from "@/lib/use-signed-in";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { PageHeader } from "@/components/nav/PageHeader";
+
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * ATM / branch cash-out map (spec §24, §25.1, issue #8).
@@ -27,21 +20,15 @@ import { useMemo, useState, type ReactNode } from "react";
  * conventional treatment for a geospatial view and reads correctly against
  * spec §25.5 (information-dense, semantic colour, no decoration).
  *
- * Three things differ from the draft, all deliberate:
+ * Two things differ from the draft, both deliberate:
  *
  * 1. **Endpoints are synthetic.** The draft named real branches at real
- *    addresses and marked them fraud-likely. This repository is public; the
- *    rule is synthetic data only (CLAUDE.md rule 3).
+ *    addresses with real coordinates and marked them fraud-likely. This
+ *    repository is public; the rule is synthetic data only (CLAUDE.md rule 3).
  * 2. **Every figure is labelled illustrative.** Nothing is calibrated yet, so
  *    the probability column is mock data wearing the shape of the real thing.
  *    That is fine for interface work and is stated on the panel, rather than
  *    left for a reader to assume (CLAUDE.md rule 4).
- * 3. **The geography is real; what is placed on it is not.** The schematic
- *    ward diagram this page carried first was honest about being a sketch, but
- *    it could not answer the question the screen exists for — how far, in
- *    which direction, at what scale. `components/map/CashOutMap` draws Google
- *    satellite imagery instead, and the caption under it separates the ground,
- *    which is real, from the endpoints, which are not.
  *
  * Not wired to a prediction service, because there is not one yet.
  */
@@ -55,107 +42,127 @@ type Endpoint = {
   operator: string;
   area: string;
   distanceKm: number;
-  /**
-   * Bearing from the last confirmed hop, clockwise from true north. The map
-   * position is derived from this and `distanceKm` rather than stored beside
-   * them: two fields that must agree and are not derived from each other will
-   * eventually disagree, and here the disagreement would be a marker sitting
-   * at a distance the table denies.
-   */
-  bearing: number;
   probability: number;
   priority: Priority;
-  // `readonly`, because these arrive from the shared catalogue in
-  // `lib/demo/endpoints`, which is frozen by its own types. A mutable
-  // annotation here would silently claim this page may edit the catalogue.
-  factors: readonly { readonly label: string; readonly weight: number }[];
-  activity: readonly {
-    readonly at: string;
-    readonly amount: string;
-    readonly account: string;
-    readonly status: string;
-  }[];
+  x: number;
+  y: number;
+  factors: { label: string; weight: number }[];
+  activity: { at: string; amount: string; account: string; status: string }[];
 };
 
-/**
- * The origin and the catalogue both moved to `lib/demo/endpoints`, so this
- * page, the ranked-locations page, the prediction and the alert all measure
- * from the same point and name the same places. They were declared here, which
- * is how "the map shows a different top candidate from the alert" becomes
- * possible in the first place.
- */
-const ORIGIN = SEARCH_ORIGIN;
-
-/**
- * Project a catalogue entry onto this page's row shape.
- *
- * With no case referred, `baselineScore` is what the map has always shown and
- * nothing changes. With a case referred, the score, the priority and the
- * factors come from that case's ranking — the same numbers `/predicted-locations`
- * lists and the alert quotes — and the case's own withdrawals are prepended to
- * the activity table, marked as belonging to it.
- *
- * Endpoints the case did not rank keep their baseline. They are still real
- * candidates on the map; they are simply not ones this case's evidence reached.
- */
-function endpointsFor(activeCase: DemoCase | null): Endpoint[] {
-  const ranked = new Map((activeCase?.locations ?? []).map((l) => [l.endpoint_id, l]));
-
-  return CASH_OUT_ENDPOINTS.map((entry) => {
-    const rank = ranked.get(entry.id);
-    const score = rank === undefined ? entry.baselineScore : Math.round(rank.score * 100);
-    const priority: Priority =
-      rank === undefined ? entry.priority : rank.risk === "HIGH" ? "high" : rank.risk === "MEDIUM" ? "medium" : "low";
-
-    const caseActivity =
-      activeCase === null
-        ? []
-        : activeCase.transactions
-            .filter((txn) => txn.to_account === entry.id)
-            .map((txn) => ({
-              at: `${txn.occurred_at.slice(8, 10)} ${MONTH_ABBR[Number(txn.occurred_at.slice(5, 7)) - 1] ?? ""}, ${txn.occurred_at.slice(11, 16)}`,
-              amount: rupees(txn.amount_inr),
-              account: txn.from_account,
-              status: "This case",
-            }));
-
-    return {
-      id: entry.id,
-      ref: entry.ref,
-      kind: entry.kind,
-      operator: entry.operator,
-      area: entry.area,
-      distanceKm: entry.distanceKm,
-      bearing: entry.bearing,
-      probability: score,
-      priority,
-      factors:
-        rank === undefined
-          ? entry.factors
-          : // The case's own reasons, weighted by what each feature actually
-            // contributed to this score. Not the catalogue's generic factors:
-            // those describe the endpoint, these describe why it is on *this*
-            // case's list.
-            rank.features
-              .map((feature, index) => ({
-                label: rank.reasons[index] ?? feature.name.replace(/_/g, " "),
-                weight: Math.round(feature.value * feature.weight * 100),
-              }))
-              .filter((factor) => factor.weight > 0)
-              .slice(0, 5),
-      activity: [...caseActivity, ...entry.activity],
-    };
-  });
-}
-
-const MONTH_ABBR = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+const ENDPOINTS: Endpoint[] = [
+  {
+    id: "EP_DEL_0783",
+    ref: "Bank A ATM – Sector 12",
+    kind: "ATM",
+    operator: "Bank A",
+    area: "Ward 3, North district",
+    distanceKm: 2.4,
+    probability: 92,
+    priority: "high",
+    x: 152,
+    y: 98,
+    factors: [
+      { label: "Multiple mule accounts linked", weight: 25 },
+      { label: "High-value cash withdrawals", weight: 20 },
+      { label: "Transactions in short time frame", weight: 18 },
+      { label: "Matches known mule pattern", weight: 15 },
+      { label: "Proximity to other flagged endpoints", weight: 14 },
+    ],
+    activity: [
+      { at: "05 Sep, 10:24", amount: "₹40,000", account: "XXXX6789", status: "Flagged" },
+      { at: "05 Sep, 09:18", amount: "₹25,000", account: "XXXX4321", status: "Flagged" },
+      { at: "04 Sep, 19:11", amount: "₹50,000", account: "XXXX9876", status: "Under review" },
+      { at: "04 Sep, 18:33", amount: "₹20,000", account: "XXXX3456", status: "Normal" },
+      { at: "03 Sep, 11:12", amount: "₹30,000", account: "XXXX7890", status: "Flagged" },
+    ],
+  },
+  {
+    id: "EP_DEL_1092",
+    ref: "Bank B ATM – Ward 4",
+    kind: "ATM",
+    operator: "Bank B",
+    area: "Ward 4, Central district",
+    distanceKm: 4.8,
+    probability: 78,
+    priority: "high",
+    x: 252,
+    y: 164,
+    factors: [
+      { label: "Two trail accounts withdrew here", weight: 22 },
+      { label: "Night-window volume above median", weight: 19 },
+      { label: "Shared operator device fingerprint", weight: 16 },
+    ],
+    activity: [
+      { at: "05 Sep, 08:02", amount: "₹35,000", account: "XXXX1122", status: "Flagged" },
+      { at: "04 Sep, 22:47", amount: "₹45,000", account: "XXXX7788", status: "Under review" },
+    ],
+  },
+  {
+    id: "EP_DEL_2210",
+    ref: "Bank C Branch – Ward 9",
+    kind: "Branch",
+    operator: "Bank C",
+    area: "Ward 9, South district",
+    distanceKm: 6.1,
+    probability: 64,
+    priority: "medium",
+    x: 112,
+    y: 184,
+    factors: [
+      { label: "One trail account holds an account here", weight: 20 },
+      { label: "Counter withdrawals rising over 14 days", weight: 14 },
+    ],
+    activity: [
+      { at: "03 Sep, 11:12", amount: "₹30,000", account: "XXXX7890", status: "Flagged" },
+    ],
+  },
+  {
+    id: "EP_DEL_3341",
+    ref: "Bank A BC agent – Ward 7",
+    kind: "Branch",
+    operator: "Bank A",
+    area: "Ward 7, North district",
+    distanceKm: 9.3,
+    probability: 52,
+    priority: "medium",
+    x: 308,
+    y: 104,
+    factors: [
+      { label: "AePS volume above agent median", weight: 17 },
+      { label: "Proximity only — no trail account seen", weight: 9 },
+    ],
+    activity: [],
+  },
+  {
+    id: "EP_DEL_4408",
+    ref: "Bank D ATM – Ward 12",
+    kind: "ATM",
+    operator: "Bank D",
+    area: "Ward 12, West district",
+    distanceKm: 12.7,
+    probability: 31,
+    priority: "low",
+    x: 86,
+    y: 230,
+    factors: [{ label: "Within outer search radius only", weight: 8 }],
+    activity: [],
+  },
+  {
+    id: "EP_DEL_5127",
+    ref: "Bank B Branch – Ward 5",
+    kind: "Branch",
+    operator: "Bank B",
+    area: "Ward 5, East district",
+    distanceKm: 14.2,
+    probability: 26,
+    priority: "low",
+    x: 340,
+    y: 212,
+    factors: [{ label: "Within outer search radius only", weight: 7 }],
+    activity: [],
+  },
 ];
-
-function rupees(value: number): string {
-  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-}
 
 const TONE: Record<Priority, { dot: string; text: string; chipBg: string; chipFg: string }> = {
   high: { dot: "#E5484D", text: "#F2686C", chipBg: "#3B1517", chipFg: "#F2686C" },
@@ -165,56 +172,29 @@ const TONE: Record<Priority, { dot: string; text: string; chipBg: string; chipFg
 
 const PRIORITY_LABEL: Record<Priority, string> = { high: "High", medium: "Medium", low: "Low" };
 
-// `noUncheckedIndexedAccess` is on, so `list[0]` is `Endpoint | undefined`. A
-// guarded helper gives a non-optional *return type*, which survives into the
-// component body — a plain `if (!x) throw` does not, because the narrowing is
-// not carried into a nested closure.
+// `noUncheckedIndexedAccess` is on, so ENDPOINTS[0] is Endpoint | undefined.
+// A guarded helper gives the constant a non-optional *return type*, which
+// survives into the component body — a plain `if (!x) throw` at module scope
+// does not, because the narrowing is not carried into a nested closure.
 function requireFirst(list: readonly Endpoint[]): Endpoint {
   const first = list[0];
-  if (!first) throw new Error("The cash-out endpoint catalogue must not be empty");
+  if (!first) throw new Error("ENDPOINTS fixture must not be empty");
   return first;
 }
+const DEFAULT_ENDPOINT = requireFirst(ENDPOINTS);
 
-/**
- * Distances here run from 2 km to over 1,700, so a fixed unit reads badly at
- * one end or the other: "1738.8 km" is false precision on a candidate nobody
- * will drive to, and "2 km" loses the detail that matters most on the one they
- * will. Metres below a kilometre, one decimal inside the local ring, whole
- * kilometres beyond it.
- */
-function formatDistance(km: number): string {
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  if (km < 100) return `${km.toFixed(1)} km`;
-  return `${Math.round(km).toLocaleString("en-IN")} km`;
-}
-
-/** An endpoint nobody has seen a withdrawal at is a prediction and nothing else. */
-const isPredictedOnly = (endpoint: Endpoint) => endpoint.activity.length === 0;
-
-/**
- * Every endpoint as a map point.
- *
- * Held behind a `useMemo` keyed on the referred case: the identity has to be
- * stable across renders — the map builds one marker per entry and would
- * otherwise rebuild all of them on every keystroke elsewhere on the page — but
- * it does have to change when a case arrives and re-scores the list.
- *
- * The distance is formatted here rather than in the map so the popup and the
- * table's distance column cannot drift apart.
- */
-function toMapPoints(endpoints: readonly Endpoint[]): readonly CashOutMapPoint[] {
-  return endpoints.map((endpoint) => ({
-    ...destinationPoint(ORIGIN, endpoint.bearing, endpoint.distanceKm),
-    id: endpoint.id,
-    label: endpoint.ref,
-    kind: endpoint.kind,
-    operator: endpoint.operator,
-    area: endpoint.area,
-    priority: endpoint.priority,
-    probability: endpoint.probability,
-    distanceLabel: formatDistance(endpoint.distanceKm),
-  }));
-}
+const WARDS = [
+  "M18 16 L150 10 L166 84 L60 108 L14 70 Z",
+  "M150 10 L300 18 L316 80 L166 84 Z",
+  "M300 18 L404 26 L400 100 L316 80 Z",
+  "M14 70 L60 108 L74 200 L20 208 Z",
+  "M60 108 L166 84 L200 184 L74 200 Z",
+  "M166 84 L316 80 L322 180 L200 184 Z",
+  "M316 80 L400 100 L404 198 L322 180 Z",
+  "M20 208 L74 200 L110 256 L26 254 Z",
+  "M74 200 L200 184 L232 254 L110 256 Z",
+  "M200 184 L322 180 L330 252 L232 254 Z",
+];
 
 /* --- small inline icons; no new dependency, matching the shell's approach --- */
 const I = {
@@ -239,46 +219,6 @@ function Icon({ d, tone }: { d: string; tone: string }) {
   );
 }
 
-/* --- map legend controls -------------------------------------------------
- *
- * Every checkbox below filters the map and the ranked table through the same
- * predicate. A control that changes only one of the two would be worse than no
- * control at all, because both are on screen at once.
- */
-
-function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="mt-2 first:mt-0">
-      <div className="mb-1 text-[9.5px] font-semibold uppercase tracking-wider text-[#5A6E88]">
-        {label}
-      </div>
-      <div className="flex flex-col gap-1">{children}</div>
-    </div>
-  );
-}
-
-function Check({
-  checked,
-  onChange,
-  children,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-ink-700">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="h-3.5 w-3.5 shrink-0 accent-[#4A8CD4]"
-      />
-      {children}
-    </label>
-  );
-}
-
 function Stat({ icon, tone, value, label }: { icon: string; tone: string; value: string; label: string }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-line bg-raised px-3.5 py-3">
@@ -291,59 +231,121 @@ function Stat({ icon, tone, value, label }: { icon: string; tone: string; value:
   );
 }
 
-type Kind = Endpoint["kind"];
-/** Whether anyone has actually seen a withdrawal here, or the endpoint is only predicted. */
-type Evidence = "predicted" | "observed";
-
 export default function MapPage() {
-  const { activeCase } = useDemoCase();
+  const caseView = useCaseView();
+  const [selectedId, setSelectedId] = useState(DEFAULT_ENDPOINT.id);
+  const [visible, setVisible] = useState<Record<Priority, boolean>>({ high: true, medium: true, low: true });
 
-  // Re-scored when a case is referred, and stable in between. Everything below
-  // — the ranked table, the marker colours, the detail panel — reads from this
-  // one list, so the map cannot rank an endpoint differently from the page that
-  // sent the investigator here.
-  const endpoints = useMemo(() => endpointsFor(activeCase), [activeCase]);
-  const mapPoints = useMemo(() => toMapPoints(endpoints), [endpoints]);
-  const defaultEndpoint = requireFirst(
-    // Highest-scoring first, so the endpoint the case is actually about is the
-    // one selected on arrival.
-    [...endpoints].sort((a, b) => b.probability - a.probability),
-  );
+  // When a case is active its scores win. The schematic positions only exist in
+  // this fixture — the endpoint registry has real lat/lon and no ward geometry —
+  // so the map keeps its own layout and takes the *ranking* from the case. That
+  // is what stops this page and /predicted-locations disagreeing about which
+  // endpoint is first, which was the whole problem.
+  //
+  // Matched on the numeric part of the reference: this fixture uses
+  // `EP_DEL_0783`, the API returns `EP-0783`.
+  const endpoints = useMemo(() => {
+    if (!caseView) return ENDPOINTS;
+    const scored = new Map(
+      caseView.candidates.map((c) => [c.endpoint_ref.replace(/\D/g, ""), c]),
+    );
+    return ENDPOINTS.map((e) => {
+      const match = scored.get(e.id.replace(/\D/g, ""));
+      if (!match) return { ...e, probability: 0, priority: "low" as Priority };
+      return {
+        ...e,
+        probability: Math.round(match.score * 100),
+        priority: (match.risk === "HIGH"
+          ? "high"
+          : match.risk === "MEDIUM"
+            ? "medium"
+            : "low") as Priority,
+      };
+    });
+  }, [caseView]);
 
-  // `null` means "follow the ranking". A seeded id would stick to whatever was
-  // top before the referred case hydrated.
-  const [pinnedId, setPinnedId] = useState<string | null>(null);
-  const selectedId = pinnedId ?? defaultEndpoint.id;
-  const setSelectedId = setPinnedId;
+  // Real coordinates for the map, from the endpoint registry rather than from
+  // this file's schematic x/y. Fetched once; a failure leaves the map empty
+  // rather than the page broken, and the ranked table beside it still works.
+  const [registry, setRegistry] = useState<ApiEndpoint[]>([]);
+  const signedIn = useSignedIn();
+  useEffect(() => {
+    if (!signedIn) return;
+    listEndpoints()
+      .then((r) => setRegistry(r.items))
+      .catch(() => setRegistry([]));
+  }, [signedIn]);
 
-  const [riskShown, setRiskShown] = useState<Record<Priority, boolean>>({
-    high: true,
-    medium: true,
-    low: true,
-  });
-  const [kindShown, setKindShown] = useState<Record<Kind, boolean>>({ ATM: true, Branch: true });
-  const [evidenceShown, setEvidenceShown] = useState<Record<Evidence, boolean>>({
-    predicted: true,
-    observed: true,
-  });
-  const [showPaths, setShowPaths] = useState(true);
+  const shown = useMemo(() => endpoints.filter((e) => visible[e.priority]), [endpoints, visible]);
 
-  // One predicate for both surfaces. The map is handed the whole fixture and a
-  // set of ids to show rather than a filtered list, so a filter toggle changes
-  // marker visibility instead of rebuilding every marker.
-  const shown = useMemo(
-    () =>
-      endpoints.filter(
-        (e) =>
-          riskShown[e.priority] &&
-          kindShown[e.kind] &&
-          evidenceShown[isPredictedOnly(e) ? "predicted" : "observed"],
-      ),
-    [endpoints, riskShown, kindShown, evidenceShown],
-  );
+  // Scores come from the same place the ranked table reads, matched on the
+  // numeric part of the reference — this page's ids are `EP_DEL_0783`, the API
+  // returns `EP-0783`. One source, so the map and the table cannot disagree
+  // about which endpoint is first.
+  const mapEndpoints = useMemo<MapEndpoint[]>(() => {
+    const scored = new Map(endpoints.map((e) => [e.id.replace(/\D/g, ""), e]));
+    return registry
+      .filter((e) => e.is_geolocatable && e.lat !== null && e.lon !== null)
+      .map((e) => {
+        const local = scored.get(e.public_ref.replace(/\D/g, ""));
+        const priority = local?.priority ?? "low";
+        return {
+          id: local?.id ?? e.public_ref,
+          label: `${e.public_ref} · ${e.operator}`,
+          lat: e.lat as number,
+          lon: e.lon as number,
+          kind:
+            e.channel === "ATM"
+              ? ("ATM" as const)
+              : e.channel === "BANK_BRANCH"
+                ? ("Branch" as const)
+                : ("Other" as const),
+          risk: (priority === "high"
+            ? "HIGH"
+            : priority === "medium"
+              ? "MEDIUM"
+              : "LOW") as MapEndpoint["risk"],
+          // On the current case's ranked list. Drawn in its own colour and
+          // given the pulse — "the model ranked this for this case" is a
+          // different statement from "this location carries risk", and an
+          // officer has to be able to tell them apart.
+          predicted: caseView?.candidates.some(
+            (c) => c.endpoint_ref.replace(/\D/g, "") === e.public_ref.replace(/\D/g, ""),
+          ),
+          score: local ? local.probability / 100 : undefined,
+        };
+      })
+      // A predicted location is never hidden by the risk checkboxes. Those
+      // filter the historical risk bands; a candidate the model produced for
+      // the open case is the reason to be on this page, and silently dropping
+      // it because it happens to sit in an unticked band is how an operator
+      // concludes the prediction produced nothing.
+      .filter((e) => e.predicted || visible[e.risk.toLowerCase() as Priority]);
+  }, [registry, endpoints, visible, caseView]);
   const ranked = useMemo(() => [...shown].sort((a, b) => b.probability - a.probability), [shown]);
-  const visibleIds = useMemo(() => new Set(shown.map((e) => e.id)), [shown]);
-  const selected = endpoints.find((e) => e.id === selectedId) ?? defaultEndpoint;
+  const found = endpoints.find((e) => e.id === selectedId) ?? DEFAULT_ENDPOINT;
+
+  // With a case active the activity table shows *that case's* hops, not the
+  // fixture's. A withdrawal table listing amounts from no case in the system is
+  // the stray-number problem this integration exists to remove — and ATLAS has
+  // no withdrawal feed, so the honest content is the money that reached this
+  // trail, labelled as such.
+  const selected = caseView
+    ? {
+        ...found,
+        activity: caseView.hops.slice(0, 5).map((h) => ({
+          at: new Date(h.occurredAt).toLocaleString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          amount: `₹${h.amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+          account: h.toLabel,
+          status: h.depth >= 3 ? "Under review" : "Traced",
+        })),
+      }
+    : found;
   const tone = TONE[selected.priority];
 
   const circ = 2 * Math.PI * 42;
@@ -365,9 +367,9 @@ export default function MapPage() {
           </>
         }
       />
+      <CaseContextBar stage="ATM / branch map" />
+      <PipelineRail current="Prediction" />
       <div className="px-5 py-5 text-ink-900">
-      <CaseBanner page="The map" />
-
       {/* ---------------- stat row ---------------- */}
       <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
         <Stat icon={I.pin} tone="#4A8CD4" value="1,842" label="Total locations" />
@@ -379,121 +381,66 @@ export default function MapPage() {
 
       {/* ---------------- map + ranked list ---------------- */}
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        {/* Column height is set by the ranked list beside this one, which grows
-            with the candidate count. The map takes whatever that leaves rather
-            than sitting at a fixed height above dead space. */}
-        <section className="relative flex min-h-[480px] flex-col overflow-hidden rounded-lg border border-line bg-surface">
-          <CashOutMap
-            className="w-full flex-1"
-            points={mapPoints}
-            visibleIds={visibleIds}
-            origin={ORIGIN}
-            ringRadiiKm={RING_RADII_KM}
-            showPaths={showPaths}
+        <section className="relative overflow-hidden rounded-lg border border-line bg-surface">
+          {/* A real projection with real coordinates, in place of the ward
+              schematic. The endpoints come from `GET /api/v1/geo/endpoints`,
+              so a marker only appears where the registry actually has a
+              latitude and longitude — a crypto off-ramp has no physical
+              place and is absent rather than given a plausible one. */}
+          <EndpointMap
+            endpoints={mapEndpoints}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            className="h-[340px] w-full"
           />
 
           {/* legend overlay, as in the design */}
-          <div className="absolute left-3 top-3 w-[172px] rounded-lg border border-[#22354C] bg-[#0A1420]/95 p-2.5 backdrop-blur">
+          <div className="absolute left-3 top-3 rounded-lg border border-[#22354C] bg-[#0A1420]/95 p-2.5 backdrop-blur">
             <div className="mb-2 text-[11px] font-semibold text-[#C6D4E4]">Show on map</div>
-
-            <FilterGroup label="Risk">
+            <div className="flex flex-col gap-1.5">
               {(["high", "medium", "low"] as Priority[]).map((p) => (
-                <Check
-                  key={p}
-                  checked={riskShown[p]}
-                  onChange={() => setRiskShown((v) => ({ ...v, [p]: !v[p] }))}
-                >
-                  <span
-                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: MARKER_RISK_COLOR[p] }}
+                <label key={p} className="flex cursor-pointer items-center gap-2 text-[11px] text-ink-700">
+                  <input
+                    type="checkbox"
+                    checked={visible[p]}
+                    onChange={() => setVisible((v) => ({ ...v, [p]: !v[p] }))}
+                    className="h-3.5 w-3.5 accent-[#4A8CD4]"
                   />
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: TONE[p].dot }} />
                   {PRIORITY_LABEL[p]}-risk locations
-                </Check>
+                </label>
               ))}
-            </FilterGroup>
 
-            <FilterGroup label="Type">
-              <Check
-                checked={kindShown.ATM}
-                onChange={() => setKindShown((v) => ({ ...v, ATM: !v.ATM }))}
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 bg-[#4C5A6E]"
-                  style={{ borderColor: MARKER_KIND_COLOR.ATM }}
-                />
-                ATMs
-              </Check>
-              <Check
-                checked={kindShown.Branch}
-                onChange={() => setKindShown((v) => ({ ...v, Branch: !v.Branch }))}
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-[1px] border-2 bg-[#4C5A6E]"
-                  style={{ borderColor: MARKER_KIND_COLOR.Branch }}
-                />
-                Bank branches
-              </Check>
-            </FilterGroup>
-
-            <FilterGroup label="Evidence">
-              <Check
-                checked={evidenceShown.predicted}
-                onChange={() => setEvidenceShown((v) => ({ ...v, predicted: !v.predicted }))}
-              >
-                Predicted only
-              </Check>
-              <Check
-                checked={evidenceShown.observed}
-                onChange={() => setEvidenceShown((v) => ({ ...v, observed: !v.observed }))}
-              >
-                With recorded activity
-              </Check>
-            </FilterGroup>
-
-            <FilterGroup label="Overlay">
-              <Check checked={showPaths} onChange={() => setShowPaths((on) => !on)}>
-                <span className="inline-block h-[2px] w-2.5 shrink-0 bg-accent" />
-                Lines to last hop
-              </Check>
-            </FilterGroup>
-
-            {/* The rings and the origin dot are drawn but not toggleable, so the
-                key says what they are rather than offering a control. */}
-            <div className="mt-2 border-t border-[#22354C] pt-2 text-[10px] leading-relaxed text-ink-500">
-              <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle" />
-              Last confirmed hop, with 2 / 5 / 10 km rings
-              <span className="mt-1 block">Fill is risk; outline is ATM or branch.</span>
+              {/* Not a checkbox: predicted candidates are always drawn. The
+                  legend still has to name the colour, or a purple pulsing
+                  marker is an unexplained one. */}
+              {caseView && caseView.candidates.length > 0 && (
+                <div className="mt-1 flex items-center gap-2 border-t border-line pt-1.5 text-[11px] text-ink-700">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ background: "#8B5CF6" }}
+                  />
+                  Predicted cash-out ({caseView.candidates.length})
+                </div>
+              )}
+              <p className="mt-1 text-[10px] leading-snug text-ink-500">
+                Pulsing markers are actionable — predicted, or high risk.
+              </p>
             </div>
           </div>
 
           <p className="border-t border-line px-3 py-2 text-[11px] text-[#5A6E88]">
-            Satellite basemap and place names © Google — real geography. The endpoints, wards and
-            scores placed on that ground are synthetic: no complaint put them there, and no
-            calibrated model scored them.
+            OpenStreetMap basemap. Markers sit at the coordinates the endpoint registry
+            carries — endpoints without one, such as a crypto off-ramp, are not drawn
+            rather than placed somewhere plausible.
           </p>
         </section>
 
         <section className="rounded-lg border border-line bg-raised p-3">
-          <h2 className="mb-1 text-[15px] font-semibold">
-            {activeCase === null
-              ? "Predicted cash-out locations"
-              : `Ranked for ${activeCase.case_id}`}
-          </h2>
+          <h2 className="mb-1 text-[15px] font-semibold">Predicted cash-out locations</h2>
           <p className="mb-3 text-[11px] leading-relaxed text-ink-500">
-            {activeCase === null ? (
-              <>
-                Baseline figures for interface development. Refer a complaint from the reporting
-                portal and this list is re-scored against that case&rsquo;s own trail.
-              </>
-            ) : (
-              <>
-                Scored against this case&rsquo;s trail — the same ranking{" "}
-                <span className="text-ink-700">Predicted locations</span> lists and the alert
-                quotes. An ordering for tasking, not a calibrated probability.
-              </>
-            )}
+            Mock figures for interface development. Live values come only from a validated,
+            calibrated model run — there is no trained model yet.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[12px]">
@@ -523,7 +470,7 @@ export default function MapPage() {
                       <td className="py-2 pr-2 font-medium text-[#DCE6F2]">{e.ref}</td>
                       <td className="py-2 pr-2 text-ink-500">{e.kind}</td>
                       <td className="py-2 pr-2 text-right font-semibold tabular-nums" style={{ color: t.text }}>
-                        {e.probability}%
+                        {e.probability > 0 ? `${e.probability}%` : "not ranked"}
                       </td>
                       <td className="py-2 pr-2">
                         <span
@@ -533,7 +480,7 @@ export default function MapPage() {
                           {PRIORITY_LABEL[e.priority]}
                         </span>
                       </td>
-                      <td className="py-2 text-right tabular-nums text-ink-700">{formatDistance(e.distanceKm)}</td>
+                      <td className="py-2 text-right tabular-nums text-ink-700">{e.distanceKm} km</td>
                     </tr>
                   );
                 })}
@@ -580,7 +527,7 @@ export default function MapPage() {
             </div>
             <div>
               <dt className="text-[10px] uppercase tracking-wider text-[#5A6E88]">From last hop</dt>
-              <dd className="mt-0.5 tabular-nums text-[#C6D4E4]">{formatDistance(selected.distanceKm)}</dd>
+              <dd className="mt-0.5 tabular-nums text-[#C6D4E4]">{selected.distanceKm} km</dd>
             </div>
           </dl>
         </section>
@@ -602,7 +549,7 @@ export default function MapPage() {
                 transform="rotate(-90 50 50)"
               />
               <text x="50" y="50" textAnchor="middle" fill="#E8EEF6" fontSize="21" fontWeight="600" className="tabular-nums">
-                {selected.probability}%
+                {selected.probability > 0 ? `${selected.probability}%` : "—"}
               </text>
               <text x="50" y="64" textAnchor="middle" fill="#7A8CA3" fontSize="8.5">
                 score
@@ -632,7 +579,9 @@ export default function MapPage() {
         </section>
 
         <section className="rounded-lg border border-line bg-raised p-3.5">
-          <h2 className="mb-2.5 text-[14px] font-semibold">Recent activity at this location</h2>
+          <h2 className="mb-2.5 text-[14px] font-semibold">
+            {caseView ? "Money that reached this trail" : "Recent activity at this location"}
+          </h2>
           {selected.activity.length === 0 ? (
             <p className="py-10 text-center text-[12px] text-[#5A6E88]">
               No withdrawals recorded in the retained window.

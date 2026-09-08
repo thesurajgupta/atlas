@@ -151,7 +151,13 @@ async def test_poison_message_is_dead_lettered(redis: Redis, stream: str) -> Non
     for _ in range(MAX_DELIVERIES + 1):
         await bus.consume(stream, "g1", "c1", always_fails, claim_idle_ms=0)
 
-    dlq = await redis.xrange(DEAD_LETTER_STREAM, count=50)
+    # `xrevrange`, not `xrange`. The dead-letter stream is append-only and
+    # shared across every run, so reading the *oldest* 50 entries meant this
+    # assertion started failing permanently once the stream passed 50 — the
+    # message it had just written sat past the window. It looked like a broken
+    # dead-letter path and was a broken test; the message we care about is by
+    # definition the newest.
+    dlq = await redis.xrevrange(DEAD_LETTER_STREAM, count=50)
     assert any(fields.get("original_stream") == stream for _, fields in dlq), (
         "a repeatedly failing message must reach the dead-letter stream"
     )

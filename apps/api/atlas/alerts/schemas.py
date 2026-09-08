@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from atlas.core.enums import AlertSeverity
+from atlas.core.enums import AlertSeverity, EvidenceSufficiency
 
 
 class AlertSummary(BaseModel):
@@ -34,6 +35,22 @@ class AlertSummary(BaseModel):
     issued_at: datetime
     acknowledged_at: datetime | None
     acknowledged_by_id: uuid.UUID | None
+
+
+class AlertEvaluateRequest(BaseModel):
+    """A candidate to put through the alert policy.
+
+    Carries no probability. Nothing in ATLAS is calibrated, so a threshold on a
+    probability would look principled and be arbitrary — evidence sufficiency is
+    the honest band available today (§16.2) and it is what gates severity.
+    """
+
+    case_ref: str = Field(min_length=1, max_length=32)
+    typology: str = Field(min_length=1, max_length=64)
+    evidence: EvidenceSufficiency
+    amount_at_risk: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    fraud_initiated_at: datetime
+    top_candidate_ref: str | None = Field(default=None, max_length=64)
 
 
 class AlertListResponse(BaseModel):

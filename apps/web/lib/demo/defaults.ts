@@ -2,24 +2,23 @@
  * Opening values for the NCRP complaint form.
  *
  * They are defaults, not fixtures: every field on the form is editable, and the
- * case ATLAS builds uses whatever the presenter actually typed. This module
- * exists so a demo can be started in one click without anybody memorising an
- * account number under stage lights.
+ * case ATLAS opens uses whatever the presenter actually typed. This module
+ * exists so a demonstration can be started in one click without anybody
+ * memorising an account number under stage lights.
  *
  * ## Why the incident time is relative
  *
- * The synthetic ledger lays its legs out at fixed offsets from the incident —
- * the last one three and a half hours later — and a trail may only be walked
- * over movements that were observable when it was reconstructed. Defaulting the
- * incident to five hours ago puts every leg behind the filing instant and every
- * predicted window ahead of it, which is the case the product is actually for:
- * the layering has happened, the cash-out has not.
+ * The transaction chain the API builds is laid out from the incident instant,
+ * and the golden-hour position every screen reports is measured from it.
+ * Defaulting the incident to five hours ago gives a case whose layering has
+ * already happened and whose cash-out has not — which is the situation the
+ * product exists for, and the one worth standing in front of.
  *
  * A fixed calendar date would drift out of that relationship the day after it
  * was written, so it is computed instead. It must be computed **on the client**
- * — see `NcrpComplaintForm`, which fills these in from an effect. A wall-clock
- * value in a render pass would differ between the server pass and the browser
- * and React would discard the tree.
+ * — see `app/ncrp/page.tsx`, which mounts the form with `ssr: false`. A
+ * wall-clock value in a server render pass would differ from the browser's and
+ * React would discard the tree it hydrated into.
  */
 
 import { COMPLAINT_TYPES, type ComplaintType } from './types';

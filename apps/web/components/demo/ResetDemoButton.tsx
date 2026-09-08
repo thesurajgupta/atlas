@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { useDemoCase } from '@/lib/demo/store';
+import { useNcrpComplaint } from '@/lib/demo/store';
 
 /**
  * Clear the demo so the whole flow can be run again.
@@ -16,8 +16,14 @@ import { useDemoCase } from '@/lib/demo/store';
  * place and shares its width — a control that grows when armed shifts whatever
  * is under it, and in the sidebar that is the rest of the navigation.
  *
- * Nothing here is destructive beyond the demo: the only thing it removes is the
- * complaint the presenter typed into this browser.
+ * It clears **both** halves — the portal's complaint record and the console's
+ * walkthrough — because clearing one alone leaves the console showing a case
+ * for a complaint the portal no longer has, which is precisely the disagreement
+ * between two screens this whole flow exists to avoid.
+ *
+ * Nothing here reaches the API: rows already written by a run stay written, and
+ * are what `/cases` and `/alerts` go on listing. This resets the demonstration,
+ * not the database.
  */
 export function ResetDemoButton({
   className = '',
@@ -30,7 +36,7 @@ export function ResetDemoButton({
   redirectTo?: string;
   label?: string;
 }) {
-  const { reset, stage } = useDemoCase();
+  const { reset, stage } = useNcrpComplaint();
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
 

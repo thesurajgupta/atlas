@@ -57,20 +57,6 @@ export interface MoneyTrailGraphProps {
   /** Complaint-level context. Synthetic fixture data, never derived from the
    *  trail — a reconstruction carries no case id, typology or reported amount. */
   readonly caseContext: SyntheticCaseContext;
-  /**
-   * Entities to open on arrival, beyond the origin.
-   *
-   * Progressive disclosure is the default and stays the default: an
-   * investigator opens one hop at a time, and a canvas that dumps forty
-   * accounts on screen is a hairball, not an intelligence product. But a
-   * *referred complaint* arrives with a reconstruction that is already bounded
-   * and already small, and the first question asked of it is "where did the
-   * money go" — not "what is one hop from the victim". Opening that trail is
-   * the answer to the question actually being asked.
-   *
-   * Omitted, only the origin is open, exactly as before.
-   */
-  readonly initiallyExpandedEntityIds?: readonly EntityId[];
 }
 
 /** One cell of the context strip. Label above, value below, tabular figures. */
@@ -137,21 +123,13 @@ export default function MoneyTrailGraph({
   paths,
   entityLocations,
   caseContext,
-  initiallyExpandedEntityIds,
 }: MoneyTrailGraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
   const [cyReady, setCyReady] = useState(false);
-
-  // The origin is always open — a canvas whose one node is collapsed shows
-  // nothing and offers no way to find out that it should be clicked.
-  const openOnArrival = useCallback(
-    () => new Set<EntityId>([originEntityId, ...(initiallyExpandedEntityIds ?? [])]),
-    [originEntityId, initiallyExpandedEntityIds],
+  const [expandedNodeIds, setExpandedNodeIds] = useState<ReadonlySet<EntityId>>(
+    () => new Set([originEntityId]),
   );
-
-  const [expandedNodeIds, setExpandedNodeIds] =
-    useState<ReadonlySet<EntityId>>(openOnArrival);
   const [selectedNodeId, setSelectedNodeId] = useState<EntityId | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -164,7 +142,7 @@ export default function MoneyTrailGraph({
   const [renderedOrigin, setRenderedOrigin] = useState(originEntityId);
   if (renderedOrigin !== originEntityId) {
     setRenderedOrigin(originEntityId);
-    setExpandedNodeIds(openOnArrival());
+    setExpandedNodeIds(new Set([originEntityId]));
     setSelectedNodeId(null);
   }
 

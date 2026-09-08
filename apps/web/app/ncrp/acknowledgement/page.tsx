@@ -4,26 +4,47 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { ApiError } from '@/lib/api';
 import { rupees } from '@/lib/demo/defaults';
-import { useDemoCase } from '@/lib/demo/store';
+import { useNcrpComplaint } from '@/lib/demo/store';
+import { apiTypologyFor } from '@/lib/demo/typology';
+import { istInstant } from '@/lib/demo/time';
+import { runInvestigation, STAGES, type StageKey, type StageState } from '@/lib/run-investigation';
 
 /**
  * The acknowledgement, and the handover.
  *
- * "Send to ATLAS" is a real transition, not a link dressed as a button: it
- * moves the stored complaint from `SUBMITTED` to `IN_ATLAS`, which is what
- * makes the case appear on the console's case list, its alert appear on the
- * alerts page and its candidates appear on the map. Before that click ATLAS has
- * nothing, and every one of those screens says so.
+ * **"Send to ATLAS" runs the real pipeline.** It calls `runInvestigation` —
+ * the same function `/demo` and `/new-complaint` call — with the values this
+ * citizen typed. Four of its six stages are real API calls: the complaint is
+ * POSTed and stamped with `observed_at`, a transaction chain is built for
+ * *this* complaint, the trail is walked by the graph endpoint, and the alert
+ * policy decides and records. One pipeline, one case, one set of numbers.
  *
- * The reference and every field below are read back out of the store rather
- * than passed through the router, so what this page prints is what was
- * persisted — if the two could differ, this is the screen where it would show.
+ * The complaint reference minted at filing is passed straight through as
+ * `caseRef`, so the reference on this page is the reference on the case, the
+ * trail and the alert.
+ *
+ * Fields ATLAS has no column for — bank, masked account, transaction reference,
+ * mobile — stay on this page and are not sent. ATLAS forecasts the cash-out leg
+ * of reported fraud and never scores individuals, so victim identity is data it
+ * has no use for.
  */
+
+const STAGE_TONE: Record<StageState, string> = {
+  pending: 'text-[#98A6B8]',
+  running: 'text-[#1A3A6B]',
+  done: 'text-[#2E7D4F]',
+  failed: 'text-[#9B2C2C]',
+};
+
 export default function AcknowledgementPage() {
   const router = useRouter();
-  const { hydrated, complaint, stage, demoCase, sendToAtlas, sentToAtlasAt } = useDemoCase();
+  const { hydrated, complaint, stage, markReferred, referredAt } = useNcrpComplaint();
+
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stages, setStages] = useState<Partial<Record<StageKey, StageState>>>({});
 
   if (!hydrated) {
     return <p className="py-16 text-center text-[13px] text-[#7A8798]">Loading…</p>;
@@ -47,15 +68,42 @@ export default function AcknowledgementPage() {
     );
   }
 
-  const sent = stage === 'IN_ATLAS';
+  const referred = stage === 'REFERRED';
 
-  function onSend() {
+  async function onSend() {
+    if (complaint === null) return;
     setSending(true);
-    sendToAtlas();
-    // Straight into the intake screen, which is where the pipeline runs. The
-    // navigation is the last step, so a failure to persist would keep us here
-    // rather than landing on a console with nothing behind it.
-    router.push('/atlas-intake');
+    setError(null);
+    setStages({});
+    try {
+      await runInvestigation({
+        complaint: {
+          // The portal's reference *is* the case reference. Everything ATLAS
+          // shows downstream is keyed on it.
+          caseRef: complaint.complaint_id,
+          typology: apiTypologyFor(complaint.complaint_type),
+          amount: `${complaint.fraud_amount_inr}.00`,
+          fraudStartedAt: istInstant(complaint.incident_date, complaint.incident_time),
+          reportedAt: complaint.submitted_at,
+          narrative: complaint.description.trim() || null,
+          // The citizen reported the account they lost money *from*, not the
+          // one it went to. Sending it as a beneficiary would file a fact the
+          // complaint does not contain.
+          beneficiaryAccount: null,
+          beneficiaryIfsc: null,
+        },
+        onStage: (key, state) => setStages((current) => ({ ...current, [key]: state })),
+      });
+      markReferred();
+      router.push('/investigation');
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? `${err.message}${err.correlationId ? ` (ref ${err.correlationId.slice(0, 8)})` : ''}`
+          : 'Could not reach ATLAS. Start the API and try again.',
+      );
+      setSending(false);
+    }
   }
 
   return (
@@ -86,7 +134,7 @@ export default function AcknowledgementPage() {
           <div className="rounded-md border border-[#C8E3D2] bg-white px-4 py-3">
             <p className="text-[11px] uppercase tracking-wider text-[#7A8798]">Status</p>
             <p className="mt-1 text-[16px] font-semibold text-[#1B2733]">
-              {sent ? 'Referred to ATLAS' : 'Submitted'}
+              {referred ? 'Referred to ATLAS' : 'Submitted'}
             </p>
           </div>
           <div className="rounded-md border border-[#C8E3D2] bg-white px-4 py-3">
@@ -105,9 +153,7 @@ export default function AcknowledgementPage() {
         <section className="min-w-0 rounded-lg border border-[#D8DFE8] bg-white">
           <div className="border-b border-[#E7ECF2] px-5 py-3.5">
             <h2 className="text-[15px] font-semibold text-[#1B2733]">Complaint record</h2>
-            <p className="mt-0.5 text-[12px] text-[#5A6A7D]">
-              Exactly as filed. Every field below is what the investigator will see.
-            </p>
+            <p className="mt-0.5 text-[12px] text-[#5A6A7D]">Exactly as filed.</p>
           </div>
           <dl className="grid gap-x-6 gap-y-4 px-5 py-4 sm:grid-cols-2">
             {[
@@ -146,25 +192,53 @@ export default function AcknowledgementPage() {
           <div className="rounded-lg border border-[#D8DFE8] bg-white p-5">
             <h2 className="text-[15px] font-semibold text-[#1B2733]">Refer to ATLAS</h2>
             <p className="mt-1.5 text-[12.5px] leading-relaxed text-[#5A6A7D]">
-              ATLAS is the investigator console for this prototype. Referring the complaint opens a
-              case against{' '}
-              <span className="font-mono text-[12px] text-[#1B2733]">{complaint.transaction_id}</span>,
-              reconstructs the money trail from{' '}
-              <span className="font-mono text-[12px] text-[#1B2733]">{complaint.victim_account}</span>{' '}
-              and ranks the cash-out endpoints it can reach.
+              ATLAS is the investigator console for this prototype. Referring the complaint files it
+              against reference{' '}
+              <span className="font-mono text-[12px] text-[#1B2733]">{complaint.complaint_id}</span>,
+              builds a transaction chain totalling{' '}
+              <span className="font-semibold text-[#1B2733]">
+                {rupees(complaint.fraud_amount_inr)}
+              </span>
+              , walks the money trail and runs the alert policy.
             </p>
 
-            {sent ? (
+            {(sending || referred) && (
+              <ol className="mt-3.5 space-y-1.5 border-t border-[#E7ECF2] pt-3">
+                {STAGES.map((s) => {
+                  const state = stages[s.key] ?? (referred && !sending ? 'done' : 'pending');
+                  return (
+                    <li key={s.key} className="flex items-baseline justify-between gap-2 text-[12px]">
+                      <span className={STAGE_TONE[state]}>
+                        {state === 'done' ? '✓' : state === 'failed' ? '✕' : '·'} {s.label}
+                      </span>
+                      <span className="shrink-0 text-[9.5px] uppercase tracking-wider text-[#98A6B8]">
+                        {s.source === 'live' ? 'live API' : 'simulated'}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+
+            {error !== null && (
+              <p
+                role="alert"
+                className="mt-3 rounded-md border border-[#E0B4B4] bg-[#FDF0F0] px-3 py-2.5 text-[12.5px] leading-relaxed text-[#9B2C2C]"
+              >
+                {error}
+              </p>
+            )}
+
+            {referred ? (
               <>
-                <p className="mt-4 rounded-md border border-[#BBD5F0] bg-[#EAF3FC] px-3 py-2.5 text-[12.5px] text-[#1A3A6B]">
-                  Referred{' '}
-                  {sentToAtlasAt !== null &&
-                    `at ${new Date(sentToAtlasAt).toLocaleTimeString('en-IN', { timeStyle: 'short' })}`}
-                  . Case{' '}
-                  <span className="font-mono font-semibold">{demoCase?.case_id}</span> is open.
+                <p className="mt-3 rounded-md border border-[#BBD5F0] bg-[#EAF3FC] px-3 py-2.5 text-[12.5px] text-[#1A3A6B]">
+                  Referred
+                  {referredAt !== null &&
+                    ` at ${new Date(referredAt).toLocaleTimeString('en-IN', { timeStyle: 'short' })}`}
+                  .
                 </p>
                 <Link
-                  href="/atlas-intake"
+                  href="/investigation"
                   className="mt-3 block rounded-md bg-[#1A3A6B] px-4 py-2.5 text-center text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
                 >
                   Open ATLAS
@@ -173,7 +247,7 @@ export default function AcknowledgementPage() {
             ) : (
               <button
                 type="button"
-                onClick={onSend}
+                onClick={() => void onSend()}
                 disabled={sending}
                 className="mt-4 w-full rounded-md bg-[#1A3A6B] px-4 py-3 text-[14.5px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
@@ -185,9 +259,10 @@ export default function AcknowledgementPage() {
           <div className="rounded-lg border border-[#D8DFE8] bg-white px-4 py-3.5">
             <h2 className="text-[13px] font-semibold text-[#1B2733]">What ATLAS will not receive</h2>
             <p className="mt-1.5 text-[11.5px] leading-relaxed text-[#5A6A7D]">
-              No name, no address, and nothing that identifies a person. ATLAS forecasts where
-              stolen money is withdrawn; it never scores individuals, so victim identity is data it
-              has no use for. The complaint reference is the link back to this portal.
+              No name, no address, no mobile number, and no bank or account reference. ATLAS
+              forecasts where stolen money is withdrawn; it never scores individuals, so victim
+              identity is data it has no use for. The complaint reference is the link back to this
+              portal.
             </p>
           </div>
         </aside>

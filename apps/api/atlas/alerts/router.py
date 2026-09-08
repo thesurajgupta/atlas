@@ -13,13 +13,16 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import func, select
 
 from atlas.alerts.models import Alert
-from atlas.alerts.schemas import AlertListResponse, AlertSummary
+from atlas.alerts.policy import AlertCandidate
+from atlas.alerts.schemas import AlertEvaluateRequest, AlertListResponse, AlertSummary
+from atlas.alerts.service import evaluate_and_record
 from atlas.audit.service import Actor, AuditRequest, record
 from atlas.core import context
+from atlas.core.clock import utc_now
 from atlas.iam.authz import Permission, jurisdiction_scope
 from atlas.iam.dependencies import SessionDep, require
 from atlas.iam.models import Investigator
@@ -27,6 +30,7 @@ from atlas.iam.models import Investigator
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
 CanRead = Annotated[Investigator, Depends(require(Permission.ALERT_READ))]
+CanAcknowledge = Annotated[Investigator, Depends(require(Permission.ALERT_ACKNOWLEDGE))]
 
 
 def _audit_actor(request: Request, investigator: Investigator) -> Actor:
@@ -51,6 +55,59 @@ def _to_summary(alert: Alert) -> AlertSummary:
         acknowledged_at=alert.acknowledged_at,
         acknowledged_by_id=alert.acknowledged_by_id,
     )
+
+
+@router.post("/evaluate", response_model=AlertSummary, status_code=status.HTTP_201_CREATED)
+async def evaluate_alert(
+    payload: AlertEvaluateRequest,
+    request: Request,
+    session: SessionDep,
+    investigator: CanAcknowledge,
+) -> AlertSummary:
+    """Put a candidate through the alert policy and record what it decided.
+
+    The policy has been merged and exhaustively tested since #52, and the
+    persistence since #74, but there was no way to reach either over HTTP — so
+    the one part of the pipeline an operator can actually see was the one part
+    that could not be exercised end to end.
+
+    **Every outcome is persisted, including the refusals.** That is the whole
+    point of the table: an alert that was not sent is a judgement the system made
+    on somebody's behalf, and "no alert appeared" cannot distinguish a deliberate
+    suppression from a pipeline that never ran. So this returns 201 whether or
+    not an alert was raised — the row was created either way, and a 204 for a
+    suppression would tell a caller that nothing happened when something did.
+
+    Gated on ``ALERT_ACKNOWLEDGE`` rather than ``ALERT_READ``: this writes.
+    """
+    decision, alert = await evaluate_and_record(
+        session,
+        AlertCandidate(
+            case_ref=payload.case_ref,
+            jurisdiction_id=str(investigator.jurisdiction_id),
+            evidence=payload.evidence,
+            amount_at_risk=payload.amount_at_risk,
+            fraud_initiated_at=payload.fraud_initiated_at,
+            top_candidate_ref=payload.top_candidate_ref,
+            typology=payload.typology,
+        ),
+        now=utc_now(),
+    )
+
+    await record(
+        session,
+        AuditRequest(
+            action="alert.evaluate",
+            resource_type="alert",
+            resource_id=payload.case_ref,
+            result="allowed",
+            correlation_id=context.get_correlation_id(),
+            detail={"raised": decision.raise_alert, "severity": str(decision.severity)},
+        ),
+        _audit_actor(request, investigator),
+    )
+    await session.commit()
+    return _to_summary(alert)
 
 
 @router.get("", response_model=AlertListResponse)
