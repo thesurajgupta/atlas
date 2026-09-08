@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import Sidebar from '@/components/Sidebar';
 import {
   ReactFlow,
@@ -239,6 +239,53 @@ export default function NetworkGraphDashboard() {
     setEntityFilters((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const selectAllEntityFilters = () => {
+    setEntityFilters({
+      person: true,
+      account: true,
+      atm: true,
+      branch: true,
+      phone: true,
+      device: true,
+      transaction: true,
+    });
+  };
+
+  const resetEntityFilters = () => {
+    setEntityFilters({
+      person: true,
+      account: true,
+      atm: true,
+      branch: true,
+      phone: true,
+      device: true,
+      transaction: true,
+    });
+  };
+
+  // Derive visible graph instantly from checkbox state.
+  // Keeping nodes/edges as the editable ReactFlow state means dragged node
+  // positions are preserved while filters are toggled.
+  const visibleNodes = useMemo(() => {
+    return nodes.filter((node) => {
+      const entityType = node.data?.type as keyof typeof entityFilters | undefined;
+      return entityType ? entityFilters[entityType] : true;
+    });
+  }, [nodes, entityFilters]);
+
+  const visibleNodeIds = useMemo(
+    () => new Set(visibleNodes.map((node) => node.id)),
+    [visibleNodes]
+  );
+
+  const visibleEdges = useMemo(() => {
+    return edges.filter(
+      (edge) =>
+        visibleNodeIds.has(edge.source) &&
+        visibleNodeIds.has(edge.target)
+    );
+  }, [edges, visibleNodeIds]);
+
   return (
     <div className="flex h-screen w-full bg-[#080C14] text-slate-400 font-sans overflow-hidden text-xs">
       {/* Navigation Sidebar */}
@@ -333,14 +380,14 @@ export default function NetworkGraphDashboard() {
                     <Filter className="w-3.5 h-3.5 text-blue-500" />
                     <span>Filters</span>
                   </div>
-                  <button className="text-blue-400 hover:text-blue-300 text-[11px] font-medium">Reset</button>
+                  <button onClick={resetEntityFilters} className="text-blue-400 hover:text-blue-300 text-[11px] font-medium">Reset</button>
                 </div>
 
                 {/* Entity Types */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-slate-300 font-medium text-[11px]">Entity Types</span>
-                    <button className="text-blue-400 text-[10px]">Select All</button>
+                    <button onClick={selectAllEntityFilters} className="text-blue-400 text-[10px]">Select All</button>
                   </div>
                   <div className="space-y-1.5">
                     <FilterCheckbox label="Person" count="412" icon={<User className="w-3.5 h-3.5 text-blue-400" />} checked={entityFilters.person} onChange={() => toggleEntityFilter("person")} />
@@ -419,17 +466,14 @@ export default function NetworkGraphDashboard() {
                 </div>
               </div>
 
-              <button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-lg transition-colors mt-4">
-                Apply Filters
-              </button>
             </div>
 
             {/* Main Interactive Canvas Area */}
             <div className="lg:col-span-6 bg-[#0B0E17] rounded-xl border border-slate-800/80 relative overflow-hidden flex flex-col min-h-[500px]">
               <div className="flex-1 w-full h-full relative">
                 <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
+                  nodes={visibleNodes}
+                  edges={visibleEdges}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   nodeTypes={nodeTypes}
@@ -440,39 +484,7 @@ export default function NetworkGraphDashboard() {
                 </ReactFlow>
 
                 {/* Overlaid Bottom Left Legend */}
-                <div className="absolute bottom-4 left-4 bg-[#0F1522]/90 border border-slate-800 rounded-lg p-3 backdrop-blur-md z-10 w-48 space-y-2">
-                  <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Legend</p>
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px]">
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5" />Person</span>
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5" />Account</span>
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-purple-500 mr-1.5" />ATM</span>
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5" />Bank Branch</span>
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-cyan-500 mr-1.5" />Phone</span>
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-pink-500 mr-1.5" />Device</span>
-                    <span className="flex items-center col-span-2"><span className="w-2 h-2 rounded-full bg-amber-600 mr-1.5" />Transaction</span>
-                  </div>
-
-                  <div className="border-t border-slate-800/80 pt-1.5 mt-1 space-y-1 text-[10px]">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">Relationship Types (Edge)</p>
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>Transfers</span>
-                      <span className="w-6 h-0.5 bg-blue-500" />
-                    </div>
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>Communicates</span>
-                      <span className="w-6 border-b border-dashed border-emerald-500" />
-                    </div>
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>Owns / Uses</span>
-                      <span className="w-6 border-b border-dotted border-cyan-500" />
-                    </div>
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>Associated With</span>
-                      <span className="w-6 border-b border-dashed border-slate-500" />
-                    </div>
-                  </div>
-                </div>
-
+            
                 {/* Overlaid Bottom Right Floating Canvas Controls */}
                 <div className="absolute bottom-4 right-4 flex flex-col space-y-1 z-10">
                   <button className="w-8 h-8 bg-[#101622] hover:bg-slate-800 border border-slate-800 rounded-lg flex items-center justify-center text-slate-300">
