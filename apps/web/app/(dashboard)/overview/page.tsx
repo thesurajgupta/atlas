@@ -15,7 +15,9 @@ import {
   auth,
   listAlerts,
   listCases,
+  listComplaints,
   type ApiAlert,
+  type ApiComplaint,
   type ApiCase,
 } from "@/lib/api";
 import { Funnel } from "@/components/overview/Funnel";
@@ -61,14 +63,32 @@ function rupees(amount: string | null): string {
 function OperationsTable({
   alerts,
   cases,
+  complaints,
 }: {
   alerts: ApiAlert[] | null;
   cases: ApiCase[] | null;
+  complaints: ApiComplaint[] | null;
 }) {
   const [severity, setSeverity] = useState<string>("ALL");
   const [showSuppressed, setShowSuppressed] = useState(true);
 
-  const byCase = new Map((cases ?? []).map((c) => [c.public_ref, c]));
+  // A case where one exists, the complaint otherwise — both carry an amount and
+  // a golden-hour position under different field names, so they are normalised
+  // here rather than leaving the table to know about two shapes.
+  const byCase = new Map(
+    (cases ?? []).map((c) => [
+      c.public_ref,
+      { amount: c.amount_at_risk, minutes: c.golden_hour_minutes_elapsed },
+    ]),
+  );
+  for (const complaint of complaints ?? []) {
+    if (!byCase.has(complaint.public_ref)) {
+      byCase.set(complaint.public_ref, {
+        amount: complaint.reported_amount,
+        minutes: complaint.golden_hour_minutes_elapsed,
+      });
+    }
+  }
   const rows = (alerts ?? [])
     .filter((a) => (showSuppressed ? true : a.raised))
     .filter((a) => severity === "ALL" || a.severity === severity);
@@ -127,7 +147,7 @@ function OperationsTable({
           <tbody className="divide-y divide-line">
             {rows.map((a) => {
               const linked = byCase.get(a.case_ref);
-              const minutes = linked?.golden_hour_minutes_elapsed ?? null;
+              const minutes = linked?.minutes ?? null;
               return (
                 <tr key={a.id} className={a.raised ? "" : "opacity-70"}>
                   <td className="px-4 py-2">
@@ -148,7 +168,7 @@ function OperationsTable({
                     </Link>
                   </td>
                   <td className="px-2 py-2 tabular-nums text-ink-700">
-                    {rupees(linked?.amount_at_risk ?? null)}
+                    {rupees(linked?.amount ?? null)}
                   </td>
                   <td
                     className={`px-2 py-2 tabular-nums ${
@@ -179,14 +199,20 @@ export default function DashboardPage() {
   const signedIn = useSignedIn();
   const [cases, setCases] = useState<ApiCase[] | null>(null);
   const [alerts, setAlerts] = useState<ApiAlert[] | null>(null);
+  // Alerts are keyed by case reference, but a complaint filed from the portal
+  // raises an alert before any case is opened on it. Without the complaints
+  // list, that row knew its own severity and reason and showed "—" for the
+  // amount and the golden hour it was arguing about.
+  const [complaints, setComplaints] = useState<ApiComplaint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!signedIn) return;
-    Promise.all([listCases(), listAlerts()])
-      .then(([c, a]) => {
+    Promise.all([listCases(), listAlerts(), listComplaints()])
+      .then(([c, a, p]) => {
         setCases(c.items);
         setAlerts(a.items);
+        setComplaints(p.items);
       })
       .catch((err: unknown) => {
         setError(
@@ -261,7 +287,7 @@ export default function DashboardPage() {
           />
         </div>
 
-        <OperationsTable alerts={alerts} cases={cases} />
+        <OperationsTable alerts={alerts} cases={cases} complaints={complaints} />
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card

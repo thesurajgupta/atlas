@@ -101,7 +101,7 @@ const TRAIL_DATASETS = [
         id: 'N-SINK-2',
         role: 'Crypto Gateway Sink',
         type: 'Destination',
-        bank: 'Binance P2P Escrow',
+        bank: 'Offshore P2P Escrow',
         accNo: 'USDT-TRX-0x88fA',
         holder: 'Wallet #883921',
         amount: '₹3,50,000',
@@ -245,6 +245,33 @@ export default function TransactionTrailPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [bankFilter, setBankFilter] = useState('All');
   const [riskFilter, setRiskFilter] = useState('All');
+
+  /**
+   * The banks actually on this trail.
+   *
+   * Read off the nodes rather than listed by hand. The hardcoded list this
+   * replaces named four banks that no longer appeared anywhere on the page
+   * once a live case was loaded, so the control offered choices that matched
+   * nothing and hid the ones that did.
+   */
+  const banksOnTrail = [...new Set(currentTrail.nodes.map((n) => n.bank))].sort();
+
+  /**
+   * The filters, applied.
+   *
+   * They previously drove nothing: the three controls were bound to state that
+   * no render path read, so a bank could be chosen and every node stayed put.
+   * A control that does not do what it says is worse than one that is absent.
+   */
+  const matchesFilters = (node: (typeof currentTrail)['nodes'][0]): boolean => {
+    if (bankFilter !== 'All' && node.bank !== bankFilter) return false;
+    if (riskFilter !== 'All' && node.risk !== riskFilter) return false;
+    const q = searchQuery.trim().toLowerCase();
+    if (q === '') return true;
+    return [node.accNo, node.holder, node.bank, node.role, node.location]
+      .filter((v): v is string => typeof v === 'string')
+      .some((v) => v.toLowerCase().includes(q));
+  };
   const [dateRange, setDateRange] = useState('04 Sep 2026 → 05 Sep 2026');
 
   // Modal / Action State
@@ -400,11 +427,11 @@ export default function TransactionTrailPage() {
                   className="w-full bg-paper border border-line text-xs text-ink-700 rounded-lg px-3 py-2 appearance-none pr-8 focus:outline-none focus:border-blue-500 cursor-pointer"
                 >
                   <option value="All">All Participating Banks</option>
-                  <option value="Bank B">Bank B</option>
-                  <option value="Bank A">Bank A</option>
-                  <option value="Bank C">Bank C</option>
-                  <option value="Bank D">Bank D</option>
-                  <option value="Binance P2P Escrow">Binance P2P Escrow</option>
+                  {banksOnTrail.map((bank) => (
+                    <option key={bank} value={bank}>
+                      {bank}
+                    </option>
+                  ))}
                 </select>
                 <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-500 pointer-events-none" />
               </div>
@@ -461,7 +488,7 @@ export default function TransactionTrailPage() {
               <div className="py-8 flex flex-col items-center justify-center space-y-10 min-w-[600px]">
                 {/* STAGE 1: SOURCE NODE */}
                 {currentTrail.nodes
-                  .filter((n) => n.type === 'Source')
+                  .filter((n) => n.type === 'Source' && matchesFilters(n))
                   .map((sourceNode) => (
                     <div key={sourceNode.id} className="flex flex-col items-center">
                       <div
@@ -499,7 +526,7 @@ export default function TransactionTrailPage() {
 
                 {/* STAGE 2: PRIMARY INTERMEDIARY / MULE NODE */}
                 {currentTrail.nodes
-                  .filter((n) => n.type === 'Intermediary')
+                  .filter((n) => n.type === 'Intermediary' && matchesFilters(n))
                   .map((muleNode) => (
                     <div key={muleNode.id} className="flex flex-col items-center">
                       <div
@@ -551,7 +578,7 @@ export default function TransactionTrailPage() {
                 {currentTrail.nodes.some((n) => n.type === 'Split Node') && (
                   <div className="grid grid-cols-2 gap-8 w-full max-w-2xl">
                     {currentTrail.nodes
-                      .filter((n) => n.type === 'Split Node')
+                      .filter((n) => n.type === 'Split Node' && matchesFilters(n))
                       .map((splitNode) => (
                         <div
                           key={splitNode.id}
@@ -592,7 +619,7 @@ export default function TransactionTrailPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {currentTrail.nodes
-                      .filter((n) => n.type === 'Destination')
+                      .filter((n) => n.type === 'Destination' && matchesFilters(n))
                       .map((sinkNode) => (
                         <div
                           key={sinkNode.id}
